@@ -1,32 +1,6 @@
 import { pool } from "../config/database.js"
 
-const obtenerConsignas = async (req, res) => {
-    try {
-        const [consignas] = await pool.query(
-            `
-            SELECT
-                id_consigna,
-                consigna,
-                respuesta_correcta
-            FROM consigna
-            ORDER BY id_consigna
-            `
-        )
-
-        return res.status(200).json({
-            consignas
-        })
-
-    } catch (error) {
-        console.error(error)
-
-        return res.status(500).json({
-            mensaje: "Error interno del servidor"
-        })
-    }
-}
-
-
+//Crear una nueva consigna en la base de datos
 const crearConsigna = async (req, res) => {
     try {
         const { consigna, respuesta_correcta } = req.body
@@ -62,6 +36,33 @@ const crearConsigna = async (req, res) => {
     }
 }
 
+//Obtener todas las consignas desde la base de datos
+const obtenerConsignas = async (req, res) => {
+    try {
+        const [consignas] = await pool.query(
+            `
+            SELECT
+                id_consigna,
+                consigna,
+                respuesta_correcta
+            FROM consigna
+            ORDER BY id_consigna
+            `
+        )
+
+        return res.status(200).json({
+            consignas
+        })
+
+    } catch (error) {
+        console.error(error)
+
+        return res.status(500).json({
+            mensaje: "Error interno del servidor"
+        })
+    }
+}
+
 const obtenerConsignaPorId = async (req, res) => {
     try {
         const { id } = req.params
@@ -83,7 +84,7 @@ const obtenerConsignaPorId = async (req, res) => {
                 mensaje: "Pregunta no encontrada"
             })
         }
-
+    
         return res.status(200).json({
             consigna: consignas[0]
         })
@@ -96,7 +97,7 @@ const obtenerConsignaPorId = async (req, res) => {
         })
     }
 }
-
+//Modificar una consigna existente en la base de datos
 const actualizarConsigna = async (req, res) => {
     try {
         const { id } = req.params
@@ -124,7 +125,6 @@ const actualizarConsigna = async (req, res) => {
                 mensaje: "Pregunta no encontrada"
             })
         }
-
         return res.status(200).json({
             mensaje: "Pregunta actualizada correctamente"
         })
@@ -137,7 +137,7 @@ const actualizarConsigna = async (req, res) => {
         })
     }
 }
-
+//Eliminar una consigna existente en la base de datos
 const eliminarConsigna = async (req, res) => {
     try {
         const { id } = req.params

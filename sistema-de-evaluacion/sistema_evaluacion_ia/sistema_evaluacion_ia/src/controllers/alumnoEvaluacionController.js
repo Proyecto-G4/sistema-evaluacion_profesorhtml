@@ -1,191 +1,113 @@
 import { pool } from "../config/database.js"
 import fs from "fs/promises"
 
+// Función auxiliar para obtener y validar al alumno autenticado
+const obtenerAlumno = async (req, res) => {
+    const [alumnos] = await pool.query(`
+        SELECT a.cedula_alumno, a.nombre, a.apellido
+        FROM login l
+        INNER JOIN alumno a ON a.cedula_alumno = l.alumno_cedula_alumno
+        WHERE l.id_login = ? AND l.rol = 'alumno'
+    `, [req.user.id])
+
+    if (alumnos.length === 0) {
+        res.status(404).json({ mensaje: "No se encontró el alumno" })
+        return null
+    }
+
+    return alumnos[0]
+}
+// Función auxiliar para eliminar archivos cuando ocurre un error
+const eliminarArchivo = async (ruta) => {
+    if (ruta) await fs.unlink(ruta).catch(() => {})
+}
+// Obtener el perfil completo del alumno
 const obtenerMiPerfil = async (req, res) => {
     try {
-        const idLogin = req.user.id
-
-        const [usuarios] = await pool.query(
-            `
-            SELECT
-                l.id_login,
-                l.usuario,
-                l.rol,
-                l.alumno_cedula_alumno,
-                a.cedula_alumno,
-                a.nombre,
-                a.apellido,
-                a.correo
+        const [usuarios] = await pool.query(`
+            SELECT l.id_login, l.usuario, l.rol, l.alumno_cedula_alumno,
+                   a.cedula_alumno, a.nombre, a.apellido, a.correo
             FROM login l
-            INNER JOIN alumno a
-                ON a.cedula_alumno = l.alumno_cedula_alumno
-            WHERE l.id_login = ?
-            AND l.rol = 'alumno'
-            `,
-            [idLogin]
-        )
+            INNER JOIN alumno a ON a.cedula_alumno = l.alumno_cedula_alumno
+            WHERE l.id_login = ? AND l.rol = 'alumno'
+        `, [req.user.id])
 
         if (usuarios.length === 0) {
-            return res.status(404).json({
-                mensaje: "No se encontró el alumno"
-            })
+            return res.status(404).json({ mensaje: "No se encontró el alumno" })
         }
 
-        return res.status(200).json({
-            alumno: usuarios[0]
-        })
-
+        return res.status(200).json({ alumno: usuarios[0] })
     } catch (error) {
         console.error(error)
-
-        return res.status(500).json({
-            mensaje: "Error interno del servidor"
-        })
+        return res.status(500).json({ mensaje: "Error interno del servidor" })
     }
 }
 
 const obtenerEvaluaciones = async (req, res) => {
     try {
-        const idLogin = req.user.id
-
-        const [evaluaciones] = await pool.query(
-            `
-            SELECT DISTINCT
-                e.id_evaluacion,
-                e.titulo,
-                e.descripcion,
-                e.fecha,
-                e.tipo
+        //Juntar las evaluaciones con las consignas y filtrar por el alumno autenticado
+        const [evaluaciones] = await pool.query(`
+            SELECT DISTINCT e.id_evaluacion, e.titulo, e.descripcion, e.fecha, e.tipo
             FROM evaluacion e
             INNER JOIN evaluacion_consigna ec
                 ON ec.evaluacion_id_evaluacion = e.id_evaluacion
-            INNER JOIN login l
-                ON l.id_login = ?
+            INNER JOIN login l ON l.id_login = ?
             WHERE l.rol = 'alumno'
             ORDER BY e.fecha
-            `,
-            [idLogin]
-        )
+        `, [req.user.id])
 
-        return res.status(200).json({
-            evaluaciones
-        })
-
+        return res.status(200).json({ evaluaciones })
     } catch (error) {
         console.error(error)
-
-        return res.status(500).json({
-            mensaje: "Error interno del servidor"
-        })
+        return res.status(500).json({ mensaje: "Error interno del servidor" })
     }
 }
-
+// Iniciar una evaluación 
 const iniciarEvaluacion = async (req, res) => {
     try {
-        const idLogin = req.user.id
         const { id } = req.params
-
-        // Buscar al alumno autenticado
-        const [alumnos] = await pool.query(
-            `
-            SELECT
-                a.cedula_alumno,
-                a.nombre,
-                a.apellido
-            FROM login l
-            INNER JOIN alumno a
-                ON a.cedula_alumno = l.alumno_cedula_alumno
-            WHERE l.id_login = ?
-            AND l.rol = 'alumno'
-            `,
-            [idLogin]
-        )
-
-        if (alumnos.length === 0) {
-            return res.status(404).json({
-                mensaje: "No se encontró el alumno"
-            })
-        }
-
-        const alumno = alumnos[0]
-
-        // Buscar la evaluación
-        const [evaluaciones] = await pool.query(
-            `
-            SELECT
-                id_evaluacion,
-                titulo,
-                descripcion,
-                fecha,
-                tipo
+        const alumno = await obtenerAlumno(req, res)
+        if (!alumno) return
+        
+        const [evaluaciones] = await pool.query(`
+            SELECT id_evaluacion, titulo, descripcion, fecha, tipo
             FROM evaluacion
             WHERE id_evaluacion = ?
-            `,
-            [id]
-        )
-
+        `, [id])
         if (evaluaciones.length === 0) {
-            return res.status(404).json({
-                mensaje: "Evaluación no encontrada"
-            })
+            return res.status(404).json({ mensaje: "Evaluación no encontrada" })
         }
-
         const evaluacion = evaluaciones[0]
-
-        // Comprobar si el alumno ya inició esta evaluación
-        const [asignacionesExistentes] = await pool.query(
-            `
-            SELECT
-                id_asignacion,
-                consigna_id_consigna,
-                estado
+        // Verificar si el alumno ya tiene asignaciones para esta evaluación
+        const [asignacionesExistentes] = await pool.query(`
+            SELECT id_asignacion, consigna_id_consigna, estado
             FROM alumno_consigna
-            WHERE alumno_cedula_alumno = ?
-            AND evaluacion_id_evaluacion = ?
-            `,
-            [alumno.cedula_alumno, id]
-        )
-
-        // Si ya existe, devolver las mismas preguntas
+            WHERE alumno_cedula_alumno = ? AND evaluacion_id_evaluacion = ?
+        `, [alumno.cedula_alumno, id])
+        // si ya existen asignaciones, devolverlas sin crear nuevas
         if (asignacionesExistentes.length > 0) {
-
-            const [preguntasAsignadas] = await pool.query(
-                `
-                SELECT
-                    ac.id_asignacion,
-                    ac.consigna_id_consigna,
-                    ac.estado,
-                    c.consigna
+            const [preguntasAsignadas] = await pool.query(`
+                SELECT ac.id_asignacion, ac.consigna_id_consigna, ac.estado, c.consigna
                 FROM alumno_consigna ac
-                INNER JOIN consigna c
-                    ON c.id_consigna = ac.consigna_id_consigna
-                WHERE ac.alumno_cedula_alumno = ?
-                AND ac.evaluacion_id_evaluacion = ?
+                INNER JOIN consigna c ON c.id_consigna = ac.consigna_id_consigna
+                WHERE ac.alumno_cedula_alumno = ? AND ac.evaluacion_id_evaluacion = ?
                 ORDER BY ac.id_asignacion
-                `,
-                [alumno.cedula_alumno, id]
-            )
+            `, [alumno.cedula_alumno, id])
 
             return res.status(200).json({
                 mensaje: "La evaluación ya fue iniciada",
                 preguntas_asignadas: preguntasAsignadas
             })
         }
-
-        // Obtener 20 preguntas aleatorias de la evaluación
-        const [preguntas] = await pool.query(
-            `
-            SELECT
-                consigna_id_consigna
+        // Seleccionar 20 preguntas aleatorias
+        const [preguntas] = await pool.query(`
+            SELECT consigna_id_consigna
             FROM evaluacion_consigna
             WHERE evaluacion_id_evaluacion = ?
             ORDER BY RAND()
             LIMIT 20
-            `,
-            [id]
-        )
+        `, [id])
 
-        // Verificar que haya al menos 20 preguntas
         if (preguntas.length < 20) {
             return res.status(400).json({
                 mensaje: "La evaluación no tiene suficientes preguntas",
@@ -193,79 +115,50 @@ const iniciarEvaluacion = async (req, res) => {
                 preguntas_necesarias: 20
             })
         }
-
-        // Crear conexión para realizar la transacción
+        // Asignar las preguntas al alumno y guardar el inicio de la evaluación
         const connection = await pool.getConnection()
-
+        // Iniciar una transacción para asegurar que todas las operaciones se realicen correctamente
         try {
             await connection.beginTransaction()
 
-            // Guardar las 20 preguntas seleccionadas
             for (const pregunta of preguntas) {
-                await connection.query(
-                    `
+                await connection.query(`
                     INSERT INTO alumno_consigna (
-                        estado,
-                        consigna_id_consigna,
-                        alumno_cedula_alumno,
-                        evaluacion_id_evaluacion
+                        estado, consigna_id_consigna,
+                        alumno_cedula_alumno, evaluacion_id_evaluacion
                     )
                     VALUES (?, ?, ?, ?)
-                    `,
-                    [
-                        "pendiente",
-                        pregunta.consigna_id_consigna,
-                        alumno.cedula_alumno,
-                        id
-                    ]
-                )
+                `, [
+                    "pendiente",
+                    pregunta.consigna_id_consigna,
+                    alumno.cedula_alumno,
+                    id
+                ])
             }
-
-            // Registrar que el alumno inició la evaluación
-            await connection.query(
-                `
+            // Guardar el inicio de la evaluación
+            await connection.query(`
                 INSERT INTO alumno_evaluacion (
-                    alumno_cedula_alumno,
-                    evaluacion_id_evaluacion,
-                    estado,
-                    fecha_inicio
+                    alumno_cedula_alumno, evaluacion_id_evaluacion,
+                    estado, fecha_inicio
                 )
                 VALUES (?, ?, ?, NOW())
-                `,
-                [
-                    alumno.cedula_alumno,
-                    id,
-                    "en_progreso"
-                ]
-            )
+            `, [alumno.cedula_alumno, id, "en_progreso"])
 
             await connection.commit()
-
         } catch (error) {
             await connection.rollback()
             throw error
-
         } finally {
             connection.release()
         }
-
-        // Obtener las preguntas asignadas con su texto
-        const [preguntasAsignadas] = await pool.query(
-            `
-            SELECT
-                ac.id_asignacion,
-                ac.estado,
-                ac.consigna_id_consigna,
-                c.consigna
+        // Obtener las preguntas asignadas para devolverlas en la respuesta
+        const [preguntasAsignadas] = await pool.query(`
+            SELECT ac.id_asignacion, ac.estado, ac.consigna_id_consigna, c.consigna
             FROM alumno_consigna ac
-            INNER JOIN consigna c
-                ON c.id_consigna = ac.consigna_id_consigna
-            WHERE ac.alumno_cedula_alumno = ?
-            AND ac.evaluacion_id_evaluacion = ?
+            INNER JOIN consigna c ON c.id_consigna = ac.consigna_id_consigna
+            WHERE ac.alumno_cedula_alumno = ? AND ac.evaluacion_id_evaluacion = ?
             ORDER BY ac.id_asignacion
-            `,
-            [alumno.cedula_alumno, id]
-        )
+        `, [alumno.cedula_alumno, id])
 
         return res.status(201).json({
             mensaje: "Evaluación iniciada correctamente",
@@ -273,64 +166,29 @@ const iniciarEvaluacion = async (req, res) => {
             evaluacion,
             preguntas_asignadas: preguntasAsignadas
         })
-
     } catch (error) {
         console.error(error)
-
-        return res.status(500).json({
-            mensaje: "Error interno del servidor"
-        })
+        return res.status(500).json({ mensaje: "Error interno del servidor" })
     }
 }
-
+// Guardar una respuesta
 const guardarRespuesta = async (req, res) => {
     try {
-        const idLogin = req.user.id
         const { id } = req.params
         const { respuesta } = req.body
 
-        // Verificar que se haya enviado una respuesta
         if (!respuesta) {
-            return res.status(400).json({
-                mensaje: "La respuesta es obligatoria"
-            })
+            return res.status(400).json({ mensaje: "La respuesta es obligatoria" })
         }
 
-        // Buscar al alumno autenticado
-        const [alumnos] = await pool.query(
-            `
-            SELECT
-                a.cedula_alumno
-            FROM login l
-            INNER JOIN alumno a
-                ON a.cedula_alumno = l.alumno_cedula_alumno
-            WHERE l.id_login = ?
-            AND l.rol = 'alumno'
-            `,
-            [idLogin]
-        )
-
-        if (alumnos.length === 0) {
-            return res.status(404).json({
-                mensaje: "No se encontró el alumno"
-            })
-        }
-
-        const alumno = alumnos[0]
-
-        // Buscar la asignación y comprobar que pertenece al alumno
-        const [asignaciones] = await pool.query(
-            `
-            SELECT
-                ac.id_asignacion,
-                ac.evaluacion_id_evaluacion,
-                ac.estado
-            FROM alumno_consigna ac
-            WHERE ac.id_asignacion = ?
-            AND ac.alumno_cedula_alumno = ?
-            `,
-            [id, alumno.cedula_alumno]
-        )
+        const alumno = await obtenerAlumno(req, res)
+        if (!alumno) return
+        // Verificar que la pregunta esté asignada al alumno
+        const [asignaciones] = await pool.query(`
+            SELECT id_asignacion, evaluacion_id_evaluacion, estado
+            FROM alumno_consigna
+            WHERE id_asignacion = ? AND alumno_cedula_alumno = ?
+        `, [id, alumno.cedula_alumno])
 
         if (asignaciones.length === 0) {
             return res.status(404).json({
@@ -339,20 +197,12 @@ const guardarRespuesta = async (req, res) => {
         }
 
         const asignacion = asignaciones[0]
-
-        // Comprobar que la evaluación del alumno exista
-        const [evaluacionesAlumno] = await pool.query(
-            `
+        // Verificar si la evaluación está finalizada
+        const [evaluacionesAlumno] = await pool.query(`
             SELECT estado
             FROM alumno_evaluacion
-            WHERE alumno_cedula_alumno = ?
-            AND evaluacion_id_evaluacion = ?
-            `,
-            [
-                alumno.cedula_alumno,
-                asignacion.evaluacion_id_evaluacion
-            ]
-        )
+            WHERE alumno_cedula_alumno = ? AND evaluacion_id_evaluacion = ?
+        `, [alumno.cedula_alumno, asignacion.evaluacion_id_evaluacion])
 
         if (evaluacionesAlumno.length === 0) {
             return res.status(404).json({
@@ -360,127 +210,70 @@ const guardarRespuesta = async (req, res) => {
             })
         }
 
-        // No permitir respuestas después de finalizar
         if (evaluacionesAlumno[0].estado === "finalizada") {
-            return res.status(400).json({
-                mensaje: "La evaluación ya fue finalizada"
-            })
+            return res.status(400).json({ mensaje: "La evaluación ya fue finalizada" })
         }
-
-        // Comprobar si ya existe una respuesta para esta pregunta
-        const [respuestasExistentes] = await pool.query(
-            `
-            SELECT
-                id_respuesta
+        // Evitar que una pregunta sea respondida más de una vez
+        const [respuestasExistentes] = await pool.query(`
+            SELECT id_respuesta
             FROM respuesta
             WHERE alumno_consigna_id_asignacion = ?
-            `,
-            [id]
-        )
+        `, [id])
 
         if (respuestasExistentes.length > 0) {
-            return res.status(409).json({
-                mensaje: "Esta pregunta ya fue respondida"
-            })
+            return res.status(409).json({ mensaje: "Esta pregunta ya fue respondida" })
         }
-
-        // Guardar la respuesta
-        const [resultado] = await pool.query(
-            `
+        // Guardar la respuesta en la base de datos
+        const [resultado] = await pool.query(`
             INSERT INTO respuesta (
-                respuesta,
-                nota_final,
-                alumno_cedula_alumno,
-                evaluacion_id_evaluacion,
-                alumno_consigna_id_asignacion
+                respuesta, nota_final, alumno_cedula_alumno,
+                evaluacion_id_evaluacion, alumno_consigna_id_asignacion
             )
             VALUES (?, NULL, ?, ?, ?)
-            `,
-            [
-                respuesta,
-                alumno.cedula_alumno,
-                asignacion.evaluacion_id_evaluacion,
-                asignacion.id_asignacion
-            ]
-        )
+        `, [
+            respuesta,
+            alumno.cedula_alumno,
+            asignacion.evaluacion_id_evaluacion,
+            asignacion.id_asignacion
+        ])
 
-        // Actualizar el estado de la asignación
-        await pool.query(
-            `
+        await pool.query(`
             UPDATE alumno_consigna
             SET estado = 'respondida'
             WHERE id_asignacion = ?
-            `,
-            [id]
-        )
+        `, [id])
 
         return res.status(201).json({
             mensaje: "Respuesta guardada correctamente",
             id_respuesta: resultado.insertId,
             id_asignacion: asignacion.id_asignacion
         })
-
     } catch (error) {
         console.error(error)
-
-        return res.status(500).json({
-            mensaje: "Error interno del servidor"
-        })
+        return res.status(500).json({ mensaje: "Error interno del servidor" })
     }
 }
-
+// Obtener el progreso de una evaluación
 const obtenerProgresoEvaluacion = async (req, res) => {
     try {
-        const idLogin = req.user.id
         const { id } = req.params
-
-        // Buscar al alumno autenticado
-        const [alumnos] = await pool.query(
-            `
-            SELECT
-                a.cedula_alumno
-            FROM login l
-            INNER JOIN alumno a
-                ON a.cedula_alumno = l.alumno_cedula_alumno
-            WHERE l.id_login = ?
-            AND l.rol = 'alumno'
-            `,
-            [idLogin]
-        )
-
-        if (alumnos.length === 0) {
-            return res.status(404).json({
-                mensaje: "No se encontró el alumno"
-            })
-        }
-
-        const alumno = alumnos[0]
-
-        // Obtener las preguntas asignadas de la evaluación
-        const [progreso] = await pool.query(
-            `
-            SELECT
-                ac.id_asignacion,
-                ac.consigna_id_consigna,
-                ac.estado,
-                c.consigna
+        const alumno = await obtenerAlumno(req, res)
+        if (!alumno) return
+        // Verificar si el alumno tiene la evaluación iniciada
+        const [progreso] = await pool.query(`
+            SELECT ac.id_asignacion, ac.consigna_id_consigna, ac.estado, c.consigna
             FROM alumno_consigna ac
-            INNER JOIN consigna c
-                ON c.id_consigna = ac.consigna_id_consigna
-            WHERE ac.alumno_cedula_alumno = ?
-            AND ac.evaluacion_id_evaluacion = ?
+            INNER JOIN consigna c ON c.id_consigna = ac.consigna_id_consigna
+            WHERE ac.alumno_cedula_alumno = ? AND ac.evaluacion_id_evaluacion = ?
             ORDER BY ac.id_asignacion
-            `,
-            [alumno.cedula_alumno, id]
-        )
+        `, [alumno.cedula_alumno, id])
 
         if (progreso.length === 0) {
             return res.status(404).json({
                 mensaje: "El alumno no tiene esta evaluación iniciada"
             })
         }
-
-        // Contar preguntas respondidas
+        
         const respondidas = progreso.filter(
             pregunta => pregunta.estado === "respondida"
         ).length
@@ -492,63 +285,30 @@ const obtenerProgresoEvaluacion = async (req, res) => {
             pendientes: progreso.length - respondidas,
             preguntas: progreso
         })
-
     } catch (error) {
         console.error(error)
-
-        return res.status(500).json({
-            mensaje: "Error interno del servidor"
-        })
+        return res.status(500).json({ mensaje: "Error interno del servidor" })
     }
 }
-
+// Finalizar una evaluación cuando todas las preguntas fueron respondidas
 const finalizarEvaluacion = async (req, res) => {
     try {
-        const idLogin = req.user.id
         const { id } = req.params
+        const alumno = await obtenerAlumno(req, res)
+        if (!alumno) return
 
-        // Buscar al alumno autenticado
-        const [alumnos] = await pool.query(
-            `
-            SELECT
-                a.cedula_alumno
-            FROM login l
-            INNER JOIN alumno a
-                ON a.cedula_alumno = l.alumno_cedula_alumno
-            WHERE l.id_login = ?
-            AND l.rol = 'alumno'
-            `,
-            [idLogin]
-        )
-
-        if (alumnos.length === 0) {
-            return res.status(404).json({
-                mensaje: "No se encontró el alumno"
-            })
-        }
-
-        const alumno = alumnos[0]
-
-        // Obtener las preguntas asignadas
-        const [asignaciones] = await pool.query(
-            `
-            SELECT
-                id_asignacion,
-                estado
+        const [asignaciones] = await pool.query(`
+            SELECT id_asignacion, estado
             FROM alumno_consigna
-            WHERE alumno_cedula_alumno = ?
-            AND evaluacion_id_evaluacion = ?
-            `,
-            [alumno.cedula_alumno, id]
-        )
-
+            WHERE alumno_cedula_alumno = ? AND evaluacion_id_evaluacion = ?
+        `, [alumno.cedula_alumno, id])
+        
         if (asignaciones.length === 0) {
             return res.status(404).json({
                 mensaje: "El alumno no tiene esta evaluación iniciada"
             })
         }
-
-        // Verificar si quedaron preguntas sin responder
+        // Verificar si hay preguntas pendientes
         const pendientes = asignaciones.filter(
             asignacion => asignacion.estado === "pendiente"
         )
@@ -559,23 +319,13 @@ const finalizarEvaluacion = async (req, res) => {
                 preguntas_pendientes: pendientes.length
             })
         }
-
-        // Marcar la evaluación como finalizada
-        const [resultado] = await pool.query(
-            `
+        
+        const [resultado] = await pool.query(`
             UPDATE alumno_evaluacion
-            SET
-                estado = 'finalizada',
-                fecha_finalizacion = NOW()
-            WHERE alumno_cedula_alumno = ?
-            AND evaluacion_id_evaluacion = ?
+            SET estado = 'finalizada', fecha_finalizacion = NOW()
+            WHERE alumno_cedula_alumno = ? AND evaluacion_id_evaluacion = ?
             AND estado = 'en_progreso'
-            `,
-            [
-                alumno.cedula_alumno,
-                id
-            ]
-        )
+        `, [alumno.cedula_alumno, id])
 
         if (resultado.affectedRows === 0) {
             return res.status(400).json({
@@ -589,125 +339,70 @@ const finalizarEvaluacion = async (req, res) => {
             total_preguntas: asignaciones.length,
             preguntas_respondidas: asignaciones.length
         })
-
     } catch (error) {
         console.error(error)
-
-        return res.status(500).json({
-            mensaje: "Error interno del servidor"
-        })
+        return res.status(500).json({ mensaje: "Error interno del servidor" })
     }
 }
-
+// Subir un archivo de código
 const subirArchivo = async (req, res) => {
     try {
-        const idLogin = req.user.id
         const { id } = req.params
 
-        // Verificar que se haya enviado un archivo
         if (!req.file) {
-            return res.status(400).json({
-                mensaje: "No se recibió ningún archivo"
-            })
+            return res.status(400).json({ mensaje: "No se recibió ningún archivo" })
         }
-
-        // Buscar al alumno autenticado
-        const [alumnos] = await pool.query(
-            `
-            SELECT
-                a.cedula_alumno
-            FROM login l
-            INNER JOIN alumno a
-                ON a.cedula_alumno = l.alumno_cedula_alumno
-            WHERE l.id_login = ?
-            AND l.rol = 'alumno'
-            `,
-            [idLogin]
-        )
-
-        if (alumnos.length === 0) {
-            await fs.unlink(req.file.path).catch(() => {})
-
-            return res.status(404).json({
-                mensaje: "No se encontró el alumno"
-            })
+        const alumno = await obtenerAlumno(req, res)
+        if (!alumno) {
+            await eliminarArchivo(req.file.path)
+            return
         }
-
-        const alumno = alumnos[0]
-
-        // Verificar que la asignación pertenece al alumno
-        const [asignaciones] = await pool.query(
-            `
-            SELECT
-                id_asignacion,
-                evaluacion_id_evaluacion
+        // Verificar que la pregunta esté asignada al alumno
+        const [asignaciones] = await pool.query(`
+            SELECT id_asignacion, evaluacion_id_evaluacion
             FROM alumno_consigna
-            WHERE id_asignacion = ?
-            AND alumno_cedula_alumno = ?
-            `,
-            [id, alumno.cedula_alumno]
-        )
+            WHERE id_asignacion = ? AND alumno_cedula_alumno = ?
+        `, [id, alumno.cedula_alumno])
 
         if (asignaciones.length === 0) {
-            await fs.unlink(req.file.path).catch(() => {})
-
+            await eliminarArchivo(req.file.path)
             return res.status(404).json({
                 mensaje: "No se encontró la pregunta asignada al alumno"
             })
         }
-
+        // Verificar si la evaluación está finalizada
         const asignacion = asignaciones[0]
-
-        // Comprobar el estado de la evaluación
-        const [evaluacionesAlumno] = await pool.query(
-            `
+        const [evaluacionesAlumno] = await pool.query(`
             SELECT estado
             FROM alumno_evaluacion
-            WHERE alumno_cedula_alumno = ?
-            AND evaluacion_id_evaluacion = ?
-            `,
-            [
-                alumno.cedula_alumno,
-                asignacion.evaluacion_id_evaluacion
-            ]
-        )
+            WHERE alumno_cedula_alumno = ? AND evaluacion_id_evaluacion = ?
+        `, [alumno.cedula_alumno, asignacion.evaluacion_id_evaluacion])
 
         if (evaluacionesAlumno.length === 0) {
-            await fs.unlink(req.file.path).catch(() => {})
-
+            await eliminarArchivo(req.file.path)
             return res.status(404).json({
                 mensaje: "No se encontró el registro de la evaluación"
             })
         }
-
         // No permitir archivos después de finalizar
         if (evaluacionesAlumno[0].estado === "finalizada") {
-            await fs.unlink(req.file.path).catch(() => {})
-
+            await eliminarArchivo(req.file.path)
             return res.status(400).json({
                 mensaje: "La evaluación ya fue finalizada"
             })
         }
-
         try {
-            // Guardar los datos del archivo en la base de datos
-            const [resultado] = await pool.query(
-                `
+            const [resultado] = await pool.query(`
                 INSERT INTO entrega_codigo (
-                    nombre_archivo,
-                    ruta_archivo,
-                    fecha_entrega,
-                    alumno_consigna_id_asignacion
+                    nombre_archivo, ruta_archivo,
+                    fecha_entrega, alumno_consigna_id_asignacion
                 )
                 VALUES (?, ?, CURDATE(), ?)
-                `,
-                [
-                    req.file.originalname,
-                    req.file.path,
-                    asignacion.id_asignacion
-                ]
-            )
-
+            `, [
+                req.file.originalname,
+                req.file.path,
+                asignacion.id_asignacion
+            ])
             return res.status(201).json({
                 mensaje: "Archivo subido correctamente",
                 id_entrega_codigo: resultado.insertId,
@@ -715,148 +410,72 @@ const subirArchivo = async (req, res) => {
                 ruta_archivo: req.file.path,
                 id_asignacion: asignacion.id_asignacion
             })
-
         } catch (error) {
-            // Si falla el registro en MySQL,
-            // eliminar el archivo que Multer ya había guardado
-            await fs.unlink(req.file.path).catch(() => {})
-
+            // Si MySQL falla, eliminar el archivo que Multer ya guardó
+            await eliminarArchivo(req.file.path)
             throw error
         }
-
     } catch (error) {
         console.error(error)
-
-        return res.status(500).json({
-            mensaje: "Error interno del servidor"
-        })
+        return res.status(500).json({ mensaje: "Error interno del servidor" })
     }
 }
-
+// Obtener resultado y preguntas de una evaluación
 const obtenerResultadoEvaluacion = async (req, res) => {
     try {
-        const idLogin = req.user.id
         const { id } = req.params
-
-        // Buscar al alumno autenticado
-        const [alumnos] = await pool.query(
-            `
-            SELECT
-                a.cedula_alumno,
-                a.nombre,
-                a.apellido
-            FROM login l
-            INNER JOIN alumno a
-                ON a.cedula_alumno = l.alumno_cedula_alumno
-            WHERE l.id_login = ?
-            AND l.rol = 'alumno'
-            `,
-            [idLogin]
-        )
-
-        if (alumnos.length === 0) {
-            return res.status(404).json({
-                mensaje: "No se encontró el alumno"
-            })
-        }
-
-        const alumno = alumnos[0]
-
-        // Buscar el registro de la evaluación del alumno
-        const [evaluacionesAlumno] = await pool.query(
-            `
-            SELECT
-                ae.estado,
-                ae.fecha_inicio,
-                ae.fecha_finalizacion,
-                e.id_evaluacion,
-                e.titulo,
-                e.descripcion,
-                e.fecha,
-                e.tipo
+        const alumno = await obtenerAlumno(req, res)
+        if (!alumno) return
+        // Verificar si el alumno tiene la evaluación iniciada
+        const [evaluacionesAlumno] = await pool.query(`
+            SELECT ae.estado, ae.fecha_inicio, ae.fecha_finalizacion,
+                   e.id_evaluacion, e.titulo, e.descripcion, e.fecha, e.tipo
             FROM alumno_evaluacion ae
-            INNER JOIN evaluacion e
-                ON e.id_evaluacion = ae.evaluacion_id_evaluacion
+            INNER JOIN evaluacion e ON e.id_evaluacion = ae.evaluacion_id_evaluacion
             WHERE ae.alumno_cedula_alumno = ?
             AND ae.evaluacion_id_evaluacion = ?
-            `,
-            [alumno.cedula_alumno, id]
-        )
-
+        `, [alumno.cedula_alumno, id])
         if (evaluacionesAlumno.length === 0) {
             return res.status(404).json({
                 mensaje: "El alumno no tiene esta evaluación iniciada"
             })
         }
-
         const evaluacion = evaluacionesAlumno[0]
-
-        // Obtener preguntas y respuestas del alumno
-        const [resultados] = await pool.query(
-            `
-            SELECT
-                ac.id_asignacion,
-                ac.consigna_id_consigna,
-                c.consigna,
-                r.id_respuesta,
-                r.respuesta,
-                r.nota_final
+        // aca obtenemos todas las preguntas asignadas al alumno para esta evaluación, junto con sus respuestas
+        const [resultados] = await pool.query(`
+            SELECT ac.id_asignacion, ac.consigna_id_consigna,
+                   c.consigna, r.id_respuesta, r.respuesta, r.nota_final
             FROM alumno_consigna ac
-            INNER JOIN consigna c
-                ON c.id_consigna = ac.consigna_id_consigna
+            INNER JOIN consigna c ON c.id_consigna = ac.consigna_id_consigna
             LEFT JOIN respuesta r
                 ON r.alumno_consigna_id_asignacion = ac.id_asignacion
             WHERE ac.alumno_cedula_alumno = ?
             AND ac.evaluacion_id_evaluacion = ?
             ORDER BY ac.id_asignacion
-            `,
-            [alumno.cedula_alumno, id]
-        )
-
-        // Calcular la suma solamente de las notas que ya existen
-        const notas = resultados
-            .map(resultado => resultado.nota_final)
-            .filter(nota => nota !== null)
-
-        const totalNotas = notas.reduce(
-            (total, nota) => total + Number(nota),
-            0
-        )
-
+        `, [alumno.cedula_alumno, id])
+        // Devolver el resultado de la evaluación, incluyendo las preguntas y las respuestas del alumno
         return res.status(200).json({
-            alumno: {
-                cedula: alumno.cedula_alumno,
-                nombre: alumno.nombre,
-                apellido: alumno.apellido
-            },
-            evaluacion: {
-                id: evaluacion.id_evaluacion,
-                titulo: evaluacion.titulo,
-                descripcion: evaluacion.descripcion,
-                fecha: evaluacion.fecha,
-                tipo: evaluacion.tipo,
-                estado: evaluacion.estado,
-                fecha_inicio: evaluacion.fecha_inicio,
-                fecha_finalizacion: evaluacion.fecha_finalizacion
-            },
-            resultado: {
-                total_preguntas: resultados.length,
-                preguntas_corregidas: notas.length,
-                preguntas_sin_corregir: resultados.length - notas.length,
-                total_notas: totalNotas
-            },
-            preguntas: resultados
-        })
+    evaluacion: {
+        titulo: evaluacion.titulo,
+        estado: evaluacion.estado,
+        fecha_inicio: evaluacion.fecha_inicio,
+        fecha_finalizacion: evaluacion.fecha_finalizacion
+    },
+    resultado: {
+        total_preguntas: resultados.length
+    },
+    preguntas: resultados.map(resultado => ({
+        numero: resultado.id_asignacion,
+        pregunta: resultado.consigna,
+        respuesta: resultado.respuesta
+    }))
+})
 
     } catch (error) {
         console.error(error)
-
-        return res.status(500).json({
-            mensaje: "Error interno del servidor"
-        })
+        return res.status(500).json({ mensaje: "Error interno del servidor" })
     }
 }
-
 export {
     obtenerMiPerfil,
     obtenerEvaluaciones,

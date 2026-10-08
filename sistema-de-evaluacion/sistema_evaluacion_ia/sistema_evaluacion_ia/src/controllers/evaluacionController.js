@@ -1,5 +1,6 @@
 import { pool } from "../config/database.js"
 
+//crear una evaluacion en la base de datos
 const crearEvaluacion = async (req, res) => {
     try {
         const {
@@ -47,6 +48,7 @@ const crearEvaluacion = async (req, res) => {
     }
 }
 
+//agregar una o mas consignas a una evaluacion existente
 const agregarPreguntaAEvaluacion = async (req, res) => {
     try {
         const { id, idConsigna } = req.params
@@ -82,7 +84,7 @@ const agregarPreguntaAEvaluacion = async (req, res) => {
                 mensaje: "Pregunta no encontrada"
             })
         }
-         
+         //Cantidad de preguntas asociadas a la evaluación
         const [cantidadPreguntas] = await pool.query(
     `
     SELECT COUNT(*) AS cantidad
@@ -139,12 +141,11 @@ const agregarPreguntaAEvaluacion = async (req, res) => {
         })
     }
 }
-
+//obtener todas las preguntas asociadas a una evaluacion
 const obtenerPreguntasDeEvaluacion = async (req, res) => {
     try {
         const { id } = req.params
 
-        // Verificar que la evaluación exista
         const [evaluaciones] = await pool.query(
             `
             SELECT id_evaluacion
@@ -160,7 +161,7 @@ const obtenerPreguntasDeEvaluacion = async (req, res) => {
             })
         }
 
-        // Obtener las preguntas asociadas
+        // Obtener preguntas asociadas a la evaluación
         const [preguntas] = await pool.query(
             `
             SELECT

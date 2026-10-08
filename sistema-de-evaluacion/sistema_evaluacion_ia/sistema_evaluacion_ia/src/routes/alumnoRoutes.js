@@ -1,5 +1,10 @@
 import { Router } from "express"
-import { obtenerAlumnos, obtenerAlumnosPorCedula, crearAlumno, actualizarAlumno, eliminarAlumno } from "../controllers/alumnoController.js"
+import { obtenerAlumnos,
+        obtenerAlumnosPorCedula, 
+        crearAlumno, 
+        actualizarAlumno, 
+        eliminarAlumno } 
+from "../controllers/alumnoController.js"
 
 const router = Router();
 
