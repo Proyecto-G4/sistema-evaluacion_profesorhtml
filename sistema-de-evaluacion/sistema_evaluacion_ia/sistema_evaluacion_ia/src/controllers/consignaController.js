@@ -34,7 +34,7 @@ const crearConsigna = async (req, res) => {
     }
 }
 
-// Guardar la respuesta correcta de una consigna
+// Guardar la respuesta correcta de una consigna existente
 const guardarRespuestaCorrecta = async (req, res) => {
     try {
         const { id } = req.params
