@@ -1,5 +1,6 @@
 import { pool } from "../config/database.js"
 import fs from "fs/promises"
+import { MIN_PREGUNTAS } from "../config/evaluacionConfig.js"   
 
 // Función auxiliar para obtener y validar al alumno autenticado
 const obtenerAlumno = async (req, res) => {
@@ -45,7 +46,7 @@ const obtenerMiPerfil = async (req, res) => {
 
 const obtenerEvaluaciones = async (req, res) => {
     try {
-        //Juntar las evaluaciones con las consignas y filtrar por el alumno autenticado
+        //Juntar las evaluaciones con las consignas y filtrar por el rol del usuario (alumno)
         const [evaluaciones] = await pool.query(`
             SELECT DISTINCT e.id_evaluacion, e.titulo, e.descripcion, e.fecha, e.tipo
             FROM evaluacion e
@@ -84,6 +85,7 @@ const iniciarEvaluacion = async (req, res) => {
             FROM alumno_consigna
             WHERE alumno_cedula_alumno = ? AND evaluacion_id_evaluacion = ?
         `, [alumno.cedula_alumno, id])
+        
         // si ya existen asignaciones, devolverlas sin crear nuevas
         if (asignacionesExistentes.length > 0) {
             const [preguntasAsignadas] = await pool.query(`
@@ -99,20 +101,20 @@ const iniciarEvaluacion = async (req, res) => {
                 preguntas_asignadas: preguntasAsignadas
             })
         }
-        // Seleccionar 20 preguntas aleatorias
+        // Seleccionar MIN_PREGUNTAS preguntas aleatorias
         const [preguntas] = await pool.query(`
             SELECT consigna_id_consigna
             FROM evaluacion_consigna
             WHERE evaluacion_id_evaluacion = ?
             ORDER BY RAND()
-            LIMIT 20
-        `, [id])
+            LIMIT ?
+        `, [id, MIN_PREGUNTAS])
 
-        if (preguntas.length < 20) {
+        if (preguntas.length < MIN_PREGUNTAS) {
             return res.status(400).json({
                 mensaje: "La evaluación no tiene suficientes preguntas",
                 preguntas_disponibles: preguntas.length,
-                preguntas_necesarias: 20
+                preguntas_necesarias: MIN_PREGUNTAS
             })
         }
         // Asignar las preguntas al alumno y guardar el inicio de la evaluación
@@ -344,7 +346,7 @@ const finalizarEvaluacion = async (req, res) => {
         return res.status(500).json({ mensaje: "Error interno del servidor" })
     }
 }
-// Subir un archivo de código
+// Subir un archivo 
 const subirArchivo = async (req, res) => {
     try {
         const { id } = req.params

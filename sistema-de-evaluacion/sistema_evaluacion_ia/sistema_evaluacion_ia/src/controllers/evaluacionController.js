@@ -1,4 +1,8 @@
 import { pool } from "../config/database.js"
+import { 
+    MAX_PREGUNTAS,
+    MIN_PREGUNTAS
+} from "../config/evaluacionConfig.js"
 
 //crear una evaluacion en la base de datos
 const crearEvaluacion = async (req, res) => {
@@ -94,9 +98,9 @@ const agregarPreguntaAEvaluacion = async (req, res) => {
     [id]
 )
 
-    if (cantidadPreguntas[0].cantidad >= 50) {
+    if (cantidadPreguntas[0].cantidad >= MAX_PREGUNTAS) {
      return res.status(400).json({
-        mensaje: "La evaluación ya tiene el máximo de 50 preguntas"
+        mensaje: `La evaluación ya tiene el máximo de ${MAX_PREGUNTAS} preguntas permitidas`
     })
     }
     

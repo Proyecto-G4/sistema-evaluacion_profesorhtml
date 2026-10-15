@@ -5,7 +5,8 @@ import {
     obtenerConsignaPorId,
     crearConsigna,
     actualizarConsigna,
-    eliminarConsigna
+    eliminarConsigna,
+    guardarRespuestaCorrecta
 } from "../controllers/consignaController.js"
 
 import { auth } from "../middlewares/auth.js"
@@ -13,6 +14,12 @@ import { auth } from "../middlewares/auth.js"
 import { roleProfesor } from "../middlewares/role.js"
 
 const router = Router()
+router.put(
+    "/:id/respuesta",
+    auth,
+    roleProfesor,
+    guardarRespuestaCorrecta
+)
 
 router.get(
     "/",
