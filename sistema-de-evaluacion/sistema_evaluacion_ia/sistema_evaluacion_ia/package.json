@@ -27,6 +27,7 @@
     "mysql2": "^3.23.3"
   },
   "devDependencies": {
-    "jsdocs": "^1.0.0"
+    "jsdocs": "^1.0.0",
+    "repomix": "^1.18.1"
   }
 }

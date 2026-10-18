@@ -3,10 +3,12 @@ import { obtenerAlumnos,
         obtenerAlumnosPorCedula, 
         crearAlumno, 
         actualizarAlumno, 
-        eliminarAlumno } 
-from "../controllers/alumnoController.js"
+        eliminarAlumno } from "../controllers/alumnoController.js"
+import { auth } from "../middlewares/auth.js"
+import { roleAdmin } from "../middlewares/role.js"
 
 const router = Router();
+router.use(auth, roleAdmin) // Aplica ambos middlewares para todas las rutas nombradas
 
 router.get("/", obtenerAlumnos)
 

@@ -1,5 +1,5 @@
 /**
- * Valido si el rol del usuario logueado es profesor
+ * Valida si el rol del usuario logueado es profesor
  * 
  * @param {import('express').Request} req
  * @param {import('express').Response} res
@@ -26,7 +26,7 @@ const roleProfesor = (req, res, next) => {
 }
 
 /**
- * Valido si el rol del usuario logueado es alumno
+ * Valida si el rol del usuario logueado es alumno
  * 
  * @param {import('express').Request} req
  * @param {import('express').Response} res
@@ -52,7 +52,34 @@ const roleAlumno = (req, res, next) => {
     }
 }
 
+/**
+ * Valida que el rol del usuario autenticado sea administrador
+ *
+ * @param {import('express').Request} req
+ * @param {import('express').Response} res
+ * @param {import('express').NextFunction} next
+ */
+
+const roleAdmin = (req, res, next) => {
+    try {
+        if (req.user?.rol?.toLowerCase() !== "admin") {
+            return res.status(403).json({
+                mensaje: "Acceso no permitido"
+            })
+        }
+
+        next()
+    } catch (error) {
+        console.error(error);
+
+        return res.status(500).json({
+            mensaje: "Error interno del servidor"
+        })
+    }
+}
+
 export {
     roleProfesor,
-    roleAlumno
+    roleAlumno,
+    roleAdmin
 }

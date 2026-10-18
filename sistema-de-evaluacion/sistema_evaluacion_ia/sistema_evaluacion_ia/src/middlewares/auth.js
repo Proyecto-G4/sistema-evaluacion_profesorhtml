@@ -1,7 +1,7 @@
 import jwt from "jsonwebtoken"
 
 /**
- * Valido token antes de pasar al controlador
+ * Valida token antes de pasar al controlador
  * 
  * @param {import('express').Request} req
  * @param {import('express').Response} res
