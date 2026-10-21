@@ -6,6 +6,7 @@ import profesorRoutes from "./routes/profesorRoutes.js"
 import authRoutes from "./routes/authRoutes.js"
 import consignaRoutes from "./routes/consignaRoutes.js"
 import evaluacionRoutes from "./routes/evaluacionRoutes.js"
+import claseRoutes from "./routes/claseRoutes.js"
 
 const app = express()
 
@@ -19,4 +20,6 @@ app.use("/api/profesores", profesorRoutes)
 app.use("/api/auth", authRoutes)
 app.use("/api/consignas", consignaRoutes)
 app.use("/api/evaluaciones", evaluacionRoutes)
+app.use("/api/clases", claseRoutes)
+
 export default app
