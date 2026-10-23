@@ -121,7 +121,7 @@ const inscribirALumnoEnClase = async (req, res) => {
             SELECT c.id_clase
             FROM clase c
             INNER JOIN login l
-                ON l.profesor_cedula_profesor =  c.profesor_cedula_profesor
+                ON l.profesor_cedula_profesor = c.profesor_cedula_profesor
             WHERE c.id_clase = ?
             AND l.id_login = ?
             AND l.rol = 'profesor'
@@ -182,8 +182,149 @@ const inscribirALumnoEnClase = async (req, res) => {
     }
 }
 
+const obtenerAlumnosDeClase = async (req, res) => {
+    try {
+        const idClase = Number(req.params.id_clase)
+
+        if (!Number.isInteger(idClase) || idClase <= 0) {
+            return res.status(400).json({
+                mensaje: "Los datos ingresados no son correctos"
+            })
+        }
+
+        // Verificar que la clase pertenezca al profesor autenticado
+        const [clases] = await pool.query(
+            `
+            SELECT c.id_clase
+            FROM clase c
+            INNER JOIN login l
+                ON l.profesor_cedula_profesor = c.profesor_cedula_profesor
+            WHERE c.id_clase = ?
+            AND l.id_login = ?
+            AND l.rol = 'profesor'
+            `,
+            [idClase, req.user.id]
+        )
+
+        if (clases.length === 0) {
+            return res.status(404).json({
+                mensaje: "Clase no encontrada"
+            })
+        }
+
+        // Listo los alumnos inscritos en una clase
+        const [alumnos] = await pool.query(
+            `
+            SELECT 
+                a.cedula_alumno,
+                a.nombre,
+                a.apellido,
+                a.correo,
+                ca.fecha_inscripcion,
+                ca.estado
+            FROM clase_alumno ca
+            INNER JOIN alumno a
+                ON a.cedula_alumno = ca.alumno_cedula_alumno
+            WHERE ca.id_clase = ?
+            ORDER BY ca.estado, a.apellido, a.nombre
+            `,
+            [idClase]
+        )
+
+        return res.status(200).json({ alumnos })
+
+    } catch (error) {
+        console.error(error)
+
+        return res.status(500).json({
+            mensaje: "Error interno del servidor"
+        })
+    }
+}
+
+const actualizarEstadoAlumnoEnClase = async (req, res) => {
+    try {
+        // Recibo los datos y los valido
+        const idClase = Number(req.params.id_clase)
+        const cedulaAlumno = Number(req.params.cedula_alumno)
+        const estado = req.body?.estado
+
+        if (!Number.isInteger(idClase) ||
+            idClase <= 0 ||
+            !Number.isInteger(cedulaAlumno) ||
+            cedulaAlumno <= 0 ||
+            !["activo", "retirado"].includes(estado)
+        ) {
+            return res.status(400).json({
+                mensaje: "Los datos ingresados no son válidos"
+            })
+        }
+
+        // Compruebo que la clase pertenece al profesor autenticado
+        const [clases] = await pool.query(
+            `
+            SELECT c.id_clase
+            FROM clase c
+            INNER JOIN login l
+                ON l.profesor_cedula_profesor = c.profesor_cedula_profesor
+            WHERE c.id_clase = ?
+            AND l.id_login = ?
+            AND l.rol = 'profesor'
+            `,
+            [idClase, req.user.id]
+        )
+
+        if (clases.length === 0) {
+            return res.status(404).json({
+                mensaje: "Clase no encontrada"
+            })
+        }
+
+        // Compruebo que el alumno está inscrito en esa clase
+        const [inscripciones] = await pool.query(
+            `
+            SELECT alumno_cedula_alumno
+            from clase_alumno
+            WHERE id_clase = ?
+            AND alumno_cedula_alumno = ?
+            `,
+            [idClase, cedulaAlumno]
+        )
+
+        if (inscripciones.length === 0) {
+            return res.status(404).json({
+                mensaje: "Inscripcion no encontrada"
+            })
+        }
+
+        // Actualizo los datos del alumno
+        await pool.query(
+            `
+            UPDATE clase_alumno
+            SET estado = ?
+            WHERE id_clase = ?
+            AND alumno_cedula_alumno = ?
+            `,
+            [estado, idClase, cedulaAlumno]
+        )
+
+        return res.status(200).json({
+            mensaje: "Estado de inscripcion actualizado"
+        })
+
+    } catch (error) {
+        console.error(error)
+
+        return res.status(500).json({
+            mensaje: "Error interno del servidor"
+        })
+    }
+}
+
 export {
     crearClase,
     obtenerMisClases,
-    inscribirALumnoEnClase
+    inscribirALumnoEnClase,
+    obtenerAlumnosDeClase,
+    actualizarEstadoAlumnoEnClase
 }

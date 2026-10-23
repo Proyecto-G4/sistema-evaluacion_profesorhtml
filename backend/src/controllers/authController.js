@@ -157,6 +157,22 @@ const crearCuentaProfesor = async (req, res) => {
             })
         }
 
+        // Valido si la cedula recibida corresponde a un profe existente
+        const [profesores] = await pool.query(
+            `
+            SELECT cedula_profesor
+            FROM profesor
+            WHERE cedula_profesor = ?
+            `,
+            [cedula_profesor]
+        )
+
+        if (profesores.length === 0) {
+            return res.status(404).json({
+                mensaje: "No existe un profesor con esa cedula"
+            })
+        }
+
         // Valido si el profesor ya tiene cuenta
         const [cuentasProfesor] = await pool.query (
             `

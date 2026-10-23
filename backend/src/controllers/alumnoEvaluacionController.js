@@ -47,15 +47,28 @@ const obtenerMiPerfil = async (req, res) => {
 const obtenerEvaluaciones = async (req, res) => {
     try {
         //Juntar las evaluaciones con las consignas y filtrar por el rol del usuario (alumno)
-        const [evaluaciones] = await pool.query(`
-            SELECT DISTINCT e.id_evaluacion, e.titulo, e.descripcion, e.fecha, e.tipo
+        const [evaluaciones] = await pool.query(
+            `
+            SELECT DISTINCT 
+            e.id_evaluacion, 
+            e.titulo, 
+            e.descripcion, 
+            e.fecha, 
+            e.tipo
             FROM evaluacion e
             INNER JOIN evaluacion_consigna ec
                 ON ec.evaluacion_id_evaluacion = e.id_evaluacion
-            INNER JOIN login l ON l.id_login = ?
-            WHERE l.rol = 'alumno'
+            INNER JOIN clase_alumno ca
+                ON ca.id_clase = e.id_clase
+                AND ca.estado = 'activo'
+            INNER JOIN login l 
+                ON l.alumno_cedula_alumno = ca.alumno_cedula_alumno
+            WHERE l.id_login = ?
+            AND l.rol = 'alumno'
             ORDER BY e.fecha
-        `, [req.user.id])
+            `, 
+            [req.user.id]
+        )
 
         return res.status(200).json({ evaluaciones })
     } catch (error) {
@@ -70,11 +83,24 @@ const iniciarEvaluacion = async (req, res) => {
         const alumno = await obtenerAlumno(req, res)
         if (!alumno) return
         
-        const [evaluaciones] = await pool.query(`
-            SELECT id_evaluacion, titulo, descripcion, fecha, tipo
-            FROM evaluacion
+        const [evaluaciones] = await pool.query(
+            `
+            SELECT 
+            e.id_evaluacion, 
+            e.titulo,
+            e.descripcion, 
+            e.fecha, 
+            e.tipo
+            FROM evaluacion e
+            INNER JOIN clase_alumno ca
+                ON ca.id_clase = e.id_clase
+                AND ca.alumno_cedula_alumno = ?
+                AND ca.estado = 'activo'
             WHERE id_evaluacion = ?
-        `, [id])
+            `, 
+            [alumno.cedula_alumno, id]
+        )
+
         if (evaluaciones.length === 0) {
             return res.status(404).json({ mensaje: "Evaluación no encontrada" })
         }
@@ -88,13 +114,16 @@ const iniciarEvaluacion = async (req, res) => {
         
         // si ya existen asignaciones, devolverlas sin crear nuevas
         if (asignacionesExistentes.length > 0) {
-            const [preguntasAsignadas] = await pool.query(`
+            const [preguntasAsignadas] = await pool.query(
+                `
                 SELECT ac.id_asignacion, ac.consigna_id_consigna, ac.estado, c.consigna
                 FROM alumno_consigna ac
                 INNER JOIN consigna c ON c.id_consigna = ac.consigna_id_consigna
                 WHERE ac.alumno_cedula_alumno = ? AND ac.evaluacion_id_evaluacion = ?
                 ORDER BY ac.id_asignacion
-            `, [alumno.cedula_alumno, id])
+                `, 
+                [alumno.cedula_alumno, id]
+            )
 
             return res.status(200).json({
                 mensaje: "La evaluación ya fue iniciada",

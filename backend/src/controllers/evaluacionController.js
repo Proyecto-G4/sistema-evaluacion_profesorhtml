@@ -1,7 +1,6 @@
 import { pool } from "../config/database.js"
 import { 
-    MAX_PREGUNTAS,
-    MIN_PREGUNTAS
+    MAX_PREGUNTAS
 } from "../config/evaluacionConfig.js"
 
 //crear una evaluacion en la base de datos
@@ -11,12 +10,41 @@ const crearEvaluacion = async (req, res) => {
             titulo,
             descripcion,
             fecha,
-            tipo
-        } = req.body
+            tipo,
+            id_clase
+        } = req.body ?? {}
+
+        const idClase = Number(id_clase)
 
         if (!titulo || !descripcion || !fecha || !tipo) {
             return res.status(400).json({
                 mensaje: "Faltan campos obligatorios"
+            })
+        }
+
+        if (!Number.isInteger(idClase) || idClase <= 0) {
+            return res.status(400).json({
+                mensaje: "Los datos ingresados no son validos"
+            })
+        }
+
+        // Confirmo que la clase pertenece al profesor autenticado
+        const [clases] = await pool.query(
+            `
+            SELECT c.id_clase
+            FROM clase c
+            INNER JOIN login l
+                ON l.profesor_cedula_profesor = c.profesor_cedula_profesor
+            WHERE c.id_clase = ?
+            AND l.id_login = ?
+            AND l.rol = 'profesor'
+            `,
+            [idClase, req.user.id]
+        )
+
+        if (clases.length === 0) {
+            return res.status(404).json({
+                mensaje: "Clase no encontrada"
             })
         }
 
@@ -26,15 +54,17 @@ const crearEvaluacion = async (req, res) => {
                 titulo,
                 descripcion,
                 fecha,
-                tipo
+                tipo,
+                id_clase
             )
-            VALUES (?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?)
             `,
             [
                 titulo,
                 descripcion,
                 fecha,
-                tipo
+                tipo,
+                idClase
             ]
         )
 
@@ -60,11 +90,17 @@ const agregarPreguntaAEvaluacion = async (req, res) => {
         // Verificar que la evaluación exista
         const [evaluaciones] = await pool.query(
             `
-            SELECT id_evaluacion
-            FROM evaluacion
-            WHERE id_evaluacion = ?
+            SELECT e.id_evaluacion
+            FROM evaluacion e
+            INNER JOIN clase c
+                ON c.id_clase = e.id_clase
+            INNER JOIN login l
+                ON l.profesor_cedula_profesor = c.profesor_cedula_profesor
+            WHERE e.id_evaluacion = ?
+            AND l.id_login = ?
+            AND l.rol = 'profesor'
             `,
-            [id]
+            [id, req.user.id]
         )
 
         if (evaluaciones.length === 0) {
@@ -88,23 +124,7 @@ const agregarPreguntaAEvaluacion = async (req, res) => {
                 mensaje: "Pregunta no encontrada"
             })
         }
-         //Cantidad de preguntas asociadas a la evaluación
-        const [cantidadPreguntas] = await pool.query(
-    `
-    SELECT COUNT(*) AS cantidad
-    FROM evaluacion_consigna
-    WHERE evaluacion_id_evaluacion = ?
-    `,
-    [id]
-)
-
-    if (cantidadPreguntas[0].cantidad >= MAX_PREGUNTAS) {
-     return res.status(400).json({
-        mensaje: `La evaluación ya tiene el máximo de ${MAX_PREGUNTAS} preguntas permitidas`
-    })
-    }
-    
-    // Verificar que la pregunta no esté ya asociada
+        // Verificar que la pregunta no esté ya asociada
         const [asociacionExistente] = await pool.query(
             `
             SELECT *
@@ -118,6 +138,22 @@ const agregarPreguntaAEvaluacion = async (req, res) => {
         if (asociacionExistente.length > 0) {
             return res.status(409).json({
                 mensaje: "La pregunta ya está asociada a esta evaluación"
+            })
+        }
+
+        // Cantidad de preguntas asociadas a la evaluación
+        const [cantidadPreguntas] = await pool.query(
+            `
+            SELECT COUNT(*) AS cantidad
+            FROM evaluacion_consigna
+            WHERE evaluacion_id_evaluacion = ?
+            `,
+            [id]
+        )
+
+        if (cantidadPreguntas[0].cantidad >= MAX_PREGUNTAS) {
+            return res.status(400).json({
+                mensaje: `La evaluación ya tiene el máximo de ${MAX_PREGUNTAS} preguntas permitidas`
             })
         }
 
@@ -152,11 +188,17 @@ const obtenerPreguntasDeEvaluacion = async (req, res) => {
 
         const [evaluaciones] = await pool.query(
             `
-            SELECT id_evaluacion
-            FROM evaluacion
-            WHERE id_evaluacion = ?
+            SELECT e.id_evaluacion
+            FROM evaluacion e
+            INNER JOIN clase c
+                ON c.id_clase = e.id_clase
+            INNER JOIN login l
+                ON l.profesor_cedula_profesor = c.profesor_cedula_profesor
+            WHERE e.id_evaluacion = ?
+            AND l.id_login = ?
+            AND l.rol = 'profesor'
             `,
-            [id]
+            [id, req.user.id]
         )
 
         if (evaluaciones.length === 0) {
@@ -197,6 +239,28 @@ const obtenerPreguntasDeEvaluacion = async (req, res) => {
 const eliminarPreguntaDeEvaluacion = async (req, res) => {
     try {
         const { id, idConsigna } = req.params
+
+        // Comprobar que la evaluación pertenece al profesor autenticado
+        const [evaluaciones] = await pool.query(
+            `
+            SELECT e.id_evaluacion
+            FROM evaluacion e
+            INNER JOIN clase c
+                ON c.id_clase = e.id_clase
+            INNER JOIN login l
+                ON l.profesor_cedula_profesor = c.profesor_cedula_profesor
+            WHERE e.id_evaluacion = ?
+            AND l.id_login = ?
+            AND l.rol = 'profesor'
+            `,
+            [id, req.user.id]
+        )
+
+        if (evaluaciones.length === 0) {
+            return res.status(404).json({
+                mensaje: "Evaluación no encontrada"
+            })
+        }
 
         const [resultado] = await pool.query(
             `
