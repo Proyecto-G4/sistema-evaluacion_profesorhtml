@@ -1,21 +1,9 @@
-import { pool } from "../config/database.js"
+﻿import { pool } from "../config/database.js"
 
 const crearClase = async (req, res) => {
     try {
         // Recibo datos 
         const { nombre, periodo_lectivo } = req.body
-
-        // Valido que sean datos válidos
-        if (
-            typeof nombre !== "string" || // typeof permite saber el tipo de dato
-            !nombre.trim() || // trim() elimina espacios al principio y final
-            typeof periodo_lectivo !== "string" ||
-            !periodo_lectivo.trim() 
-        ) {
-            return res.status(400).json({
-                mensaje: "Los datos ingresados no son válidos"
-            })
-        }
 
         // Obtenemos la cedula del profesor desde la base de datos
         const [profesores] = await pool.query(
@@ -29,7 +17,7 @@ const crearClase = async (req, res) => {
 
         if (profesores.length === 0) {
             return res.status(403).json({
-                mensaje: "No se encontró el profesor autenticado"
+                mensaje: "No se encontrÃ³ el profesor autenticado"
             })
         }
 
@@ -44,7 +32,7 @@ const crearClase = async (req, res) => {
             )
             VALUES (?, ?, ?)
             `,
-            [nombre.trim(), periodo_lectivo.trim(), cedulaProfesor]
+            [nombre, periodo_lectivo, cedulaProfesor]
         )
 
         return res.status(201).json({
@@ -100,20 +88,8 @@ const obtenerMisClases = async (req, res) => {
 
 const inscribirALumnoEnClase = async (req, res) => {
     try {
-        const idClase = Number(req.params.id_clase)
-        const cedulaAlumno = Number(req.body?.cedula_alumno)
-
-        if (
-            !Number.isInteger(idClase) || 
-            idClase <= 0 ||
-            !Number.isInteger(cedulaAlumno) ||
-            cedulaAlumno <= 0
-        ) {
-            return res.status(400).json({
-                mensaje: "Los datos ingresados no son válidos"
-            })
-
-        }
+        const idClase = req.params.id_clase
+        const cedulaAlumno = req.body.cedula_alumno
 
         // Compruebo que la clase pertenece al profesor autenticado
         const [clases] = await pool.query(
@@ -170,7 +146,7 @@ const inscribirALumnoEnClase = async (req, res) => {
     } catch (error) {
         if (error.code === "ER_DUP_ENTRY") {
             return res.status(409).json({
-                mensaje: "El alumno ya está inscrito en esta clase"
+                mensaje: "El alumno ya estÃ¡ inscrito en esta clase"
             })
         }
 
@@ -184,13 +160,7 @@ const inscribirALumnoEnClase = async (req, res) => {
 
 const obtenerAlumnosDeClase = async (req, res) => {
     try {
-        const idClase = Number(req.params.id_clase)
-
-        if (!Number.isInteger(idClase) || idClase <= 0) {
-            return res.status(400).json({
-                mensaje: "Los datos ingresados no son correctos"
-            })
-        }
+        const idClase = req.params.id_clase
 
         // Verificar que la clase pertenezca al profesor autenticado
         const [clases] = await pool.query(
@@ -245,20 +215,9 @@ const obtenerAlumnosDeClase = async (req, res) => {
 const actualizarEstadoAlumnoEnClase = async (req, res) => {
     try {
         // Recibo los datos y los valido
-        const idClase = Number(req.params.id_clase)
-        const cedulaAlumno = Number(req.params.cedula_alumno)
+        const idClase = req.params.id_clase
+        const cedulaAlumno = req.params.cedula_alumno
         const estado = req.body?.estado
-
-        if (!Number.isInteger(idClase) ||
-            idClase <= 0 ||
-            !Number.isInteger(cedulaAlumno) ||
-            cedulaAlumno <= 0 ||
-            !["activo", "retirado"].includes(estado)
-        ) {
-            return res.status(400).json({
-                mensaje: "Los datos ingresados no son válidos"
-            })
-        }
 
         // Compruebo que la clase pertenece al profesor autenticado
         const [clases] = await pool.query(
@@ -280,7 +239,7 @@ const actualizarEstadoAlumnoEnClase = async (req, res) => {
             })
         }
 
-        // Compruebo que el alumno está inscrito en esa clase
+        // Compruebo que el alumno estÃ¡ inscrito en esa clase
         const [inscripciones] = await pool.query(
             `
             SELECT alumno_cedula_alumno
@@ -328,3 +287,7 @@ export {
     obtenerAlumnosDeClase,
     actualizarEstadoAlumnoEnClase
 }
+
+
+
+

@@ -7,9 +7,11 @@ import authRoutes from "./routes/authRoutes.js"
 import consignaRoutes from "./routes/consignaRoutes.js"
 import evaluacionRoutes from "./routes/evaluacionRoutes.js"
 import claseRoutes from "./routes/claseRoutes.js"
+import helmet from "helmet"
 
 const app = express()
 
+app.use(helmet())
 app.use(cors())
     
 app.use(express.json())

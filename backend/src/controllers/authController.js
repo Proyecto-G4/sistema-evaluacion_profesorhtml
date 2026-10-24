@@ -12,36 +12,9 @@ import jwt from "jsonwebtoken"
 const crearUsuario = async (req, res) => {
     try {
         // Recibo los datos ingresados
-        const {usuario, password, confirmarPassword, rol, cedula} = req.body;
+        const {usuario, password, rol, cedula} = req.body;
 
-        // Verifico que todos los campos hayan sido enviados
-        if (!usuario || !password || !confirmarPassword || !rol || !cedula) {
-            return res.status(400).json({
-                mensaje: "Faltan campos obligatorios"
-            });
-        }
-
-        // Verifico que coincidan las contraseñas
-        if (password !== confirmarPassword) {
-            return res.status(400).json({
-                mensaje: "Las contraseñas no coinciden"
-            })
-        }
-
-        if (password.length < 8) {
-            return res.status(400).json({
-                mensaje: "La contraseña debe tener al menos 8 carácteres"
-            });
-        }
-
-        // Verifico que mande un rol existente
-        if (rol !== "alumno") {
-            return res.status(400).json({
-                mensaje: "Rol inválido"
-            });
-        }
-
-        // Verifico el rol para alumno
+        // Verifico si la cedula pertenece a un alumno existente
         const [rolAlumno] = await pool.query(
             `
             SELECT cedula_alumno
@@ -133,29 +106,7 @@ const crearCuentaProfesor = async (req, res) => {
             cedula_profesor,
             usuario,
             password,
-            confirmarPassword,
         } = req.body;
-        
-        // Valido que no falten campos 
-        if (!cedula_profesor || !usuario || !password || !confirmarPassword) {
-            return res.status(400).json({
-                mensaje: "Faltan campos obligatorios"
-            })
-        }
-
-        // Valido la igualdad de las contraseñas
-        if (password !== confirmarPassword) {
-            return res.status(400).json({
-                mensaje: "Las contraseñas no coinciden"
-            })
-        }
-        
-        // Valido la longitud de la contraseña
-        if (password.length < 8) {
-            return res.status(400).json({
-                mensaje: "La contraseña debe tener al menos 8 caracteres"
-            })
-        }
 
         // Valido si la cedula recibida corresponde a un profe existente
         const [profesores] = await pool.query(
@@ -244,14 +195,8 @@ const crearCuentaProfesor = async (req, res) => {
 
 const login = async (req, res) => {
     try {
-        // Recibo datos y los valido
+        // Recibo los datos validados por el middleware
         const {usuario, password} = req.body;
-
-        if (!usuario || !password) {
-            return res.status(400).json({
-                mensaje: "Faltan campos obligatorios"
-            });
-        }
 
         // Verifico que ese usuario exista
         const [usuarios] = await pool.query(
