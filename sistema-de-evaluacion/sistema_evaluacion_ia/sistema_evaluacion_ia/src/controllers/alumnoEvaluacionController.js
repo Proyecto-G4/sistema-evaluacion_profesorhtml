@@ -1,6 +1,7 @@
 import { pool } from "../config/database.js"
 import fs from "fs/promises"
-import { MIN_PREGUNTAS } from "../config/evaluacionConfig.js"   
+import { MIN_PREGUNTAS } from "../config/evaluacionConfig.js"
+import { corregirEntregaCodigo } from "../services/ollamaGradingService.js"
 
 // Función auxiliar para obtener y validar al alumno autenticado
 const obtenerAlumno = async (req, res) => {
@@ -361,9 +362,11 @@ const subirArchivo = async (req, res) => {
         }
         // Verificar que la pregunta esté asignada al alumno
         const [asignaciones] = await pool.query(`
-            SELECT id_asignacion, evaluacion_id_evaluacion
-            FROM alumno_consigna
-            WHERE id_asignacion = ? AND alumno_cedula_alumno = ?
+            SELECT ac.id_asignacion, ac.evaluacion_id_evaluacion,
+                   c.consigna, c.respuesta_correcta, c.rubrica
+            FROM alumno_consigna ac
+            INNER JOIN consigna c ON c.id_consigna = ac.consigna_id_consigna
+            WHERE ac.id_asignacion = ? AND ac.alumno_cedula_alumno = ?
         `, [id, alumno.cedula_alumno])
 
         if (asignaciones.length === 0) {
@@ -393,8 +396,9 @@ const subirArchivo = async (req, res) => {
                 mensaje: "La evaluación ya fue finalizada"
             })
         }
+        let resultado
         try {
-            const [resultado] = await pool.query(`
+            resultado = (await pool.query(`
                 INSERT INTO entrega_codigo (
                     nombre_archivo, ruta_archivo,
                     fecha_entrega, alumno_consigna_id_asignacion
@@ -404,19 +408,30 @@ const subirArchivo = async (req, res) => {
                 req.file.originalname,
                 req.file.path,
                 asignacion.id_asignacion
-            ])
-            return res.status(201).json({
-                mensaje: "Archivo subido correctamente",
-                id_entrega_codigo: resultado.insertId,
-                nombre_archivo: req.file.originalname,
-                ruta_archivo: req.file.path,
-                id_asignacion: asignacion.id_asignacion
-            })
+            ]))[0]
         } catch (error) {
-            // Si MySQL falla, eliminar el archivo que Multer ya guardó
             await eliminarArchivo(req.file.path)
             throw error
         }
+
+        const correccion = await corregirEntregaCodigo({
+            idEntrega: resultado.insertId,
+            nombreArchivo: req.file.originalname,
+            rutaArchivo: req.file.path,
+            consigna: asignacion.consigna,
+            respuestaCorrecta: asignacion.respuesta_correcta,
+            rubrica: asignacion.rubrica
+        })
+
+        return res.status(201).json({
+            mensaje: correccion.estado === "corregida"
+                ? "Archivo subido y corregido automáticamente"
+                : "Archivo guardado, pero no se pudo corregir automáticamente",
+            id_entrega_codigo: resultado.insertId,
+            nombre_archivo: req.file.originalname,
+            id_asignacion: asignacion.id_asignacion,
+            correccion
+        })
     } catch (error) {
         console.error(error)
         return res.status(500).json({ mensaje: "Error interno del servidor" })
@@ -455,6 +470,34 @@ const obtenerResultadoEvaluacion = async (req, res) => {
             AND ac.evaluacion_id_evaluacion = ?
             ORDER BY ac.id_asignacion
         `, [alumno.cedula_alumno, id])
+        const [entregas] = await pool.query(`
+            SELECT ec.id_entrega_codigo, ec.nombre_archivo, ec.fecha_entrega,
+                   ec.alumno_consigna_id_asignacion AS id_asignacion,
+                   cc.estado AS estado_correccion, cc.nota,
+                   cc.feedback_json, cc.modelo, cc.error_message
+            FROM entrega_codigo ec
+            INNER JOIN alumno_consigna ac
+                ON ac.id_asignacion = ec.alumno_consigna_id_asignacion
+            LEFT JOIN correccion_codigo cc
+                ON cc.entrega_codigo_id = ec.id_entrega_codigo
+            WHERE ac.alumno_cedula_alumno = ?
+            AND ac.evaluacion_id_evaluacion = ?
+            ORDER BY ec.fecha_entrega DESC, ec.id_entrega_codigo DESC
+        `, [alumno.cedula_alumno, id])
+
+        const entregasConFeedback = entregas.map((entrega) => ({
+            ...entrega,
+            feedback: typeof entrega.feedback_json === "string"
+                ? JSON.parse(entrega.feedback_json)
+                : entrega.feedback_json
+        }))
+        const notas = resultados
+            .map((resultado) => resultado.nota_final)
+            .filter((nota) => nota !== null)
+        const totalNotas = notas.reduce(
+            (total, nota) => total + Number(nota),
+            0
+        )
         // Devolver el resultado de la evaluación, incluyendo las preguntas y las respuestas del alumno
         return res.status(200).json({
     evaluacion: {
@@ -464,13 +507,21 @@ const obtenerResultadoEvaluacion = async (req, res) => {
         fecha_finalizacion: evaluacion.fecha_finalizacion
     },
     resultado: {
-        total_preguntas: resultados.length
+        total_preguntas: resultados.length,
+        preguntas_corregidas: notas.length,
+        preguntas_sin_corregir: resultados.length - notas.length,
+        total_notas: totalNotas,
+        entregas_codigo: entregas.length,
+        entregas_corregidas: entregas.filter(
+            (entrega) => entrega.estado_correccion === "corregida"
+        ).length
     },
     preguntas: resultados.map(resultado => ({
         numero: resultado.id_asignacion,
         pregunta: resultado.consigna,
         respuesta: resultado.respuesta
-    }))
+    })),
+    entregas_codigo: entregasConFeedback
 })
 
     } catch (error) {

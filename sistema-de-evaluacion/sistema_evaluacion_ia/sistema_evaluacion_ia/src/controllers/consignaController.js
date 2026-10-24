@@ -3,7 +3,7 @@ import { pool } from "../config/database.js"
 // Crear una nueva consigna en la base de datos
 const crearConsigna = async (req, res) => {
     try {
-        const { consigna } = req.body
+        const { consigna, rubrica } = req.body
 
         if (typeof consigna !== "string" || !consigna.trim()) {
             return res.status(400).json({
@@ -15,9 +15,10 @@ const crearConsigna = async (req, res) => {
             `INSERT INTO consigna (
                 consigna,
                 respuesta_correcta,
-                fecha_creacion
-            ) VALUES (?, ?, NOW())`,
-            [consigna.trim(), ""]
+                fecha_creacion,
+                rubrica
+            ) VALUES (?, ?, NOW(), ?)`,
+            [consigna.trim(), "", rubrica ?? null]
         )
 
         return res.status(201).json({
@@ -87,7 +88,8 @@ const obtenerConsignas = async (req, res) => {
                 id_consigna,
                 consigna,
                 respuesta_correcta,
-                fecha_creacion
+                fecha_creacion,
+                rubrica
             FROM consigna
             ORDER BY fecha_creacion ${orden}
             `
@@ -115,7 +117,8 @@ const obtenerConsignaPorId = async (req, res) => {
             SELECT
                 id_consigna,
                 consigna,
-                respuesta_correcta
+                respuesta_correcta,
+                rubrica
             FROM consigna
             WHERE id_consigna = ?
             `,
@@ -144,7 +147,7 @@ const obtenerConsignaPorId = async (req, res) => {
 const actualizarConsigna = async (req, res) => {
     try {
         const { id } = req.params
-        const { consigna, respuesta_correcta } = req.body
+        const { consigna, respuesta_correcta, rubrica } = req.body
 
         if (!consigna || !respuesta_correcta) {
             return res.status(400).json({
@@ -157,10 +160,11 @@ const actualizarConsigna = async (req, res) => {
             UPDATE consigna
             SET
                 consigna = ?,
-                respuesta_correcta = ?
+                respuesta_correcta = ?,
+                rubrica = COALESCE(?, rubrica)
             WHERE id_consigna = ?
             `,
-            [consigna, respuesta_correcta, id]
+            [consigna, respuesta_correcta, rubrica ?? null, id]
         )
 
         if (resultado.affectedRows === 0) {
