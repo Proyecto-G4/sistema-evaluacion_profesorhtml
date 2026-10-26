@@ -28,7 +28,7 @@ Invoke-RestMethod -Uri http://127.0.0.1:11434/api/chat -Method Post -ContentType
 
 ## 2. Configurar backend y frontend
 
-En `sistema_evaluacion_ia/sistema_evaluacion_ia`, completa el `.env` que ya usa la conexión MySQL:
+En `backend`, completa el `.env` que ya usa la conexión MySQL:
 
 ```env
 OLLAMA_URL=http://127.0.0.1:11434
@@ -67,7 +67,7 @@ La rúbrica se guarda en MySQL y se añade al contexto de corrección. Si se omi
 ## 5. Iniciar y probar la corrección
 
 1. Ejecuta la migración, inicia Ollama y verifica que el modelo aparece con `ollama list`.
-2. Desde `sistema_evaluacion_ia/sistema_evaluacion_ia`, inicia el backend con `pnpm dev`.
+2. Desde `backend`, inicia el backend con `pnpm dev`.
 3. Inicia sesión como alumno y obtén el `id_asignacion` de una pregunta de su evaluación.
 4. Envía el archivo al endpoint indicado abajo. La respuesta incluye el estado, la nota y la devolución de IA; si Ollama falla, la entrega queda guardada y el error se devuelve para que pueda reintentarse.
 
