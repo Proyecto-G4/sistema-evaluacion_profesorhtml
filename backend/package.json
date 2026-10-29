@@ -1,4 +1,4 @@
-{
+﻿{
   "name": "sistema_evaluacion_ia",
   "version": "1.0.0",
   "description": "",
@@ -26,6 +26,7 @@
     "jsonwebtoken": "^9.0.3",
     "multer": "^2.4.0",
     "mysql2": "^3.23.3",
+    "yauzl": "^3.4.0",
     "zod": "^4.6.7"
   },
   "devDependencies": {
