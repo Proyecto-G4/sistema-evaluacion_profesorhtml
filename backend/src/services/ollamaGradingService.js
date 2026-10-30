@@ -138,6 +138,10 @@ const leerEntrega = async (rutaArchivo, nombreArchivo) => {
     }]
 }
 
+const esListaDeTextos = (valor) => 
+    Array.isArray(valor) &&
+    valor.every(elemento => typeof elemento === "string")
+
 const validarCorreccion = (contenido) => {
     let correccion
 
@@ -179,6 +183,13 @@ const validarCorreccion = (contenido) => {
         ) {
             throw new Error(`Ollama devolvió un criterio inválido en la posición ${indice}`)
         }
+    }
+
+    if (
+        !esListaDeTextos(correccion.fortalezas) || 
+        !esListaDeTextos(correccion.mejoras)
+    ) {
+        throw new Error("Ollama devolvió listas de fortalezas o mejoras inválidas")
     }
 
     return {

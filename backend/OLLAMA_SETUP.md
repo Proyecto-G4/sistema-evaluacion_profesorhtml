@@ -4,7 +4,7 @@
 
 - **Ollama** ejecuta localmente el modelo de lenguaje. El proyecto usa `qwen2.5-coder:7b` por defecto y no necesita una clave de proveedor externo.
 - **`src/services/ollamaGradingService.js`** lee el código fuente o el ZIP, prepara la consigna, la respuesta de referencia y la rúbrica, llama a Ollama y valida el JSON devuelto.
-- **`src/middlewares/upload.js`** recibe el archivo multipart `archivo`, filtra extensiones permitidas y limita la subida a 5 MB.
+- **`src/middlewares/upload.js`** recibe el archivo multipart `archivo`, filtra extensiones permitidas y limita la subida a 10 MB.
 - **`src/controllers/alumnoEvaluacionController.js`** comprueba que la pregunta asignada pertenezca al alumno, registra la entrega, solicita la corrección y expone los resultados guardados.
 - **`migrations/001_ollama_correcciones.sql`** agrega una rúbrica a cada consigna y crea la tabla que persiste el estado, la nota, la devolución, el modelo y los errores de corrección.
 - Esta integración añade los endpoints de backend. La interfaz Vue del repositorio todavía no muestra la carga de código ni la devolución de IA.
@@ -81,7 +81,7 @@ Los resultados guardados están disponibles con `GET /api/alumnos/evaluaciones/I
 
 ## Límites
 
-- Se admiten archivos `.c`, `.cpp`, `.cs`, `.h`, `.java`, `.py`, `.ts`, `.html`, `.css`, `.js`, `.json` y `.txt`, o un `.zip` con archivos de esos tipos. El ZIP se lee sin extraerlo al disco; se analizan hasta 20 fuentes, 150 KB por archivo y 400 KB en total. La subida se limita a 10 MB.
+- Se admiten archivos `.c`, `.cpp`, `.cs`, `.h`, `.java`, `.py`, `.ts`, `.html`, `.css`, `.js`, `.json` y `.txt`, o un `.zip` con archivos de esos tipos. El ZIP se lee sin extraerlo al disco; se analizan hasta 5 fuentes, con un máximo de 10.000.000 bytes por archivo y en total. La subida también se limita a 10.000.000 bytes (10 MB decimales).
 - Ollama revisa estáticamente el contenido; el backend no ejecuta el código del alumno. La nota no demuestra que el programa compile o funcione.
 - La nota se genera en escala de 0 a 10 y se almacena aparte de `respuesta.nota_final`.
 - La corrección es sincrónica y puede tardar hasta dos minutos; durante ese tiempo la petición de subida sigue abierta.

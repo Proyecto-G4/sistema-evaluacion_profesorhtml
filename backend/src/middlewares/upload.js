@@ -22,7 +22,9 @@ const extensionesPermitidas = [
     ".js",
     ".json",
     ".txt",
-    ".zip"
+    ".zip",
+    ".h",
+    ".ts"
 ]
 
 const fileFilter = (req, file, cb) => {
@@ -38,7 +40,7 @@ const upload = multer({
     storage,
     fileFilter,
     limits: {
-        fileSize: 10 * 1024 * 1024 
+        fileSize: 10_000_000 
     }
 })
 

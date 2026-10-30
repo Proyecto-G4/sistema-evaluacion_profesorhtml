@@ -61,6 +61,18 @@ router.post(
                     })
                 }
 
+                if (error.code === "LIMIT_FILE_SIZE") {
+                    return res.status(413).json({
+                        mensaje: "El archivo supera el tamaño permitido"
+                    })
+                }
+
+                if (error.code === "LIMIT_UNEXPECTED_FILE") {
+                    return res.status(400).json({
+                        mensaje: "El campo del archivo no es válido o se enviaron demasiados archivos"
+                    })
+                }
+
                 return res.status(500).json({
                     mensaje: "Error al subir el archivo"
                 })
