@@ -13,60 +13,45 @@ import {
     obtenerResultadoEvaluacion
 } from "../controllers/alumnoEvaluacionController.js"
 const router = Router()
+router.use(auth, roleAlumno)
 
 router.get(
     "/perfil",
-    auth,
-    roleAlumno,
     obtenerMiPerfil
 )
 
 router.get(
     "/evaluaciones",
-    auth,
-    roleAlumno,
     obtenerEvaluaciones
 )
 
 router.post(
     "/evaluaciones/:id/iniciar",
-    auth,
-    roleAlumno,
     iniciarEvaluacion
 )
 
 
 router.post(
     "/evaluaciones/respuestas/:id",
-    auth,
-    roleAlumno,
     guardarRespuesta
 )
 
 router.get(
     "/evaluaciones/:id/progreso",
-    auth,
-    roleAlumno,
     obtenerProgresoEvaluacion
 )
 
 router.get(
     "/evaluaciones/:id/resultados",
-    auth,
-    roleAlumno,
     obtenerResultadoEvaluacion)
 
 router.post(
     "/evaluaciones/:id/finalizar",
-    auth,
-    roleAlumno,
     finalizarEvaluacion
 )
 
 router.post(
     "/evaluaciones/entrega/:id",
-    auth,
-    roleAlumno,
     (req, res, next) => {
         upload.single("archivo")(req, res, (error) => {
             if (error) {

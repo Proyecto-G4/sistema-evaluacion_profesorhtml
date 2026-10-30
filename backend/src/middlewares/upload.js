@@ -1,7 +1,6 @@
 import multer from "multer"
 import path from "path"
 
-// Configuración de almacenamiento
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
         cb(null, "uploads/")
@@ -12,7 +11,6 @@ const storage = multer.diskStorage({
         cb(null, `${Date.now()}-${nombreOriginal}`)
     }
 })
-// Filtro de archivos permitidos
 const extensionesPermitidas = [
     ".cs",
     ".java",
@@ -35,7 +33,6 @@ const fileFilter = (req, file, cb) => {
 
     cb(null, true)
 }
-// Configuración de multer
 const upload = multer({
     storage,
     fileFilter,

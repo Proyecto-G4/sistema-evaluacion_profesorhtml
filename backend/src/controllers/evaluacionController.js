@@ -1,9 +1,5 @@
 import { pool } from "../config/database.js"
-import { 
-    MAX_PREGUNTAS
-} from "../config/evaluacionConfig.js"
 
-//crear una evaluacion en la base de datos
 const crearEvaluacion = async (req, res) => {
     try {
         const {
@@ -11,10 +7,12 @@ const crearEvaluacion = async (req, res) => {
             descripcion,
             fecha,
             tipo,
-            id_clase
+            id_clase,
+            cantidad_preguntas
         } = req.body ?? {}
 
         const idClase = Number(id_clase)
+        const cantidadPreguntas = Number(cantidad_preguntas)
 
         if (!titulo || !descripcion || !fecha || !tipo) {
             return res.status(400).json({
@@ -24,11 +22,19 @@ const crearEvaluacion = async (req, res) => {
 
         if (!Number.isInteger(idClase) || idClase <= 0) {
             return res.status(400).json({
-                mensaje: "Los datos ingresados no son validos"
+                mensaje: "Los datos de la clase no son válidos"
             })
         }
 
-        // Confirmo que la clase pertenece al profesor autenticado
+        if (
+            !Number.isInteger(cantidadPreguntas) ||
+            cantidadPreguntas < 1
+        ) {
+            return res.status(400).json({
+                mensaje: "La cantidad de preguntas debe ser un entero mayor que cero"
+            })
+        }
+
         const [clases] = await pool.query(
             `
             SELECT c.id_clase
@@ -55,22 +61,25 @@ const crearEvaluacion = async (req, res) => {
                 descripcion,
                 fecha,
                 tipo,
-                id_clase
+                id_clase,
+                cantidad_preguntas
             )
-            VALUES (?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?)
             `,
             [
                 titulo,
                 descripcion,
                 fecha,
                 tipo,
-                idClase
+                idClase,
+                cantidadPreguntas
             ]
         )
 
         return res.status(201).json({
             mensaje: "Evaluación creada correctamente",
-            id_evaluacion: resultado.insertId
+            id_evaluacion: resultado.insertId,
+            cantidad_preguntas: cantidadPreguntas
         })
 
     } catch (error) {
@@ -82,12 +91,10 @@ const crearEvaluacion = async (req, res) => {
     }
 }
 
-//agregar una o mas consignas a una evaluacion existente
 const agregarPreguntaAEvaluacion = async (req, res) => {
     try {
         const { id, idConsigna } = req.params
 
-        // Verificar que la evaluación exista
         const [evaluaciones] = await pool.query(
             `
             SELECT e.id_evaluacion
@@ -109,7 +116,6 @@ const agregarPreguntaAEvaluacion = async (req, res) => {
             })
         }
 
-        // Verificar que la pregunta exista
         const [consignas] = await pool.query(
             `
             SELECT id_consigna
@@ -124,7 +130,7 @@ const agregarPreguntaAEvaluacion = async (req, res) => {
                 mensaje: "Pregunta no encontrada"
             })
         }
-        // Verificar que la pregunta no esté ya asociada
+
         const [asociacionExistente] = await pool.query(
             `
             SELECT *
@@ -141,23 +147,6 @@ const agregarPreguntaAEvaluacion = async (req, res) => {
             })
         }
 
-        // Cantidad de preguntas asociadas a la evaluación
-        const [cantidadPreguntas] = await pool.query(
-            `
-            SELECT COUNT(*) AS cantidad
-            FROM evaluacion_consigna
-            WHERE evaluacion_id_evaluacion = ?
-            `,
-            [id]
-        )
-
-        if (cantidadPreguntas[0].cantidad >= MAX_PREGUNTAS) {
-            return res.status(400).json({
-                mensaje: `La evaluación ya tiene el máximo de ${MAX_PREGUNTAS} preguntas permitidas`
-            })
-        }
-
-        // Asociar pregunta con evaluación
         await pool.query(
             `
             INSERT INTO evaluacion_consigna (
@@ -181,7 +170,7 @@ const agregarPreguntaAEvaluacion = async (req, res) => {
         })
     }
 }
-//obtener todas las preguntas asociadas a una evaluacion
+
 const obtenerPreguntasDeEvaluacion = async (req, res) => {
     try {
         const { id } = req.params
@@ -207,7 +196,6 @@ const obtenerPreguntasDeEvaluacion = async (req, res) => {
             })
         }
 
-        // Obtener preguntas asociadas a la evaluación
         const [preguntas] = await pool.query(
             `
             SELECT
@@ -240,7 +228,6 @@ const eliminarPreguntaDeEvaluacion = async (req, res) => {
     try {
         const { id, idConsigna } = req.params
 
-        // Comprobar que la evaluación pertenece al profesor autenticado
         const [evaluaciones] = await pool.query(
             `
             SELECT e.id_evaluacion

@@ -1,6 +1,5 @@
 import { pool } from "../config/database.js"
 
-// Crear una nueva consigna en la base de datos
 const crearConsigna = async (req, res) => {
     try {
         const { consigna, rubrica } = req.body
@@ -35,7 +34,6 @@ const crearConsigna = async (req, res) => {
     }
 }
 
-// Guardar la respuesta correcta de una consigna existente
 const guardarRespuestaCorrecta = async (req, res) => {
     try {
         const { id } = req.params
@@ -78,7 +76,6 @@ const guardarRespuestaCorrecta = async (req, res) => {
     }
 }
 
-//Obtener todas las consignas desde la base de datos
 const obtenerConsignas = async (req, res) => {
     const orden = req.query.orden === "antiguas" ? "ASC" : "DESC"
     try {
@@ -141,7 +138,6 @@ const obtenerConsignaPorId = async (req, res) => {
         })
     }
 }
-//Modificar una consigna existente en la base de datos
 const actualizarConsigna = async (req, res) => {
     try {
         const { id } = req.params
@@ -182,7 +178,6 @@ const actualizarConsigna = async (req, res) => {
         })
     }
 }
-//Eliminar una consigna existente en la base de datos
 const eliminarConsigna = async (req, res) => {
     try {
         const { id } = req.params
