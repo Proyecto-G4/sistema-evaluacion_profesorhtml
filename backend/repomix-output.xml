@@ -901,7 +901,6 @@ const subirArchivo = async (req, res) => {
         const alumno = await obtenerAlumno(req, res);
 
         if (!alumno) {
-            await eliminarArchivo(req.file.path);
             return;
         }
 
@@ -921,8 +920,6 @@ const subirArchivo = async (req, res) => {
         `, [id, alumno.cedula_alumno]);
 
         if (asignaciones.length === 0) {
-            await eliminarArchivo(req.file.path);
-
             return res.status(404).json({
                 mensaje: "No se encontró la pregunta asignada al alumno"
             });
@@ -942,16 +939,12 @@ const subirArchivo = async (req, res) => {
         ]);
 
         if (evaluacionesAlumno.length === 0) {
-            await eliminarArchivo(req.file.path);
-
             return res.status(404).json({
                 mensaje: "No se encontró el registro de la evaluación"
             });
         }
 
         if (evaluacionesAlumno[0].estado === "finalizada") {
-            await eliminarArchivo(req.file.path);
-
             return res.status(400).json({
                 mensaje: "La evaluación ya fue finalizada"
             });
@@ -993,15 +986,15 @@ const subirArchivo = async (req, res) => {
         });
 
     } catch (error) {
-        if (req.file && !archivoRegistrado) {
-            await eliminarArchivo(req.file.path);
-        }
-
         console.error(error);
 
         return res.status(500).json({
             mensaje: "Error interno del servidor"
         });
+    } finally {
+        if (req.file && !archivoRegistrado) {
+            await eliminarArchivo(req.file.path);
+        }
     }
 };
 const obtenerResultadoEvaluacion = async (req, res) => {
@@ -1034,22 +1027,62 @@ const obtenerResultadoEvaluacion = async (req, res) => {
             AND ac.evaluacion_id_evaluacion = ?
             ORDER BY ac.id_asignacion
         `, [alumno.cedula_alumno, id])
+        const [entregasCodigo] = await pool.query(`
+            SELECT ac.id_asignacion, ec.id_entrega_codigo,
+                   ec.nombre_archivo, ec.fecha_entrega,
+                   cc.estado, cc.nota, cc.feedback_json,
+                   cc.modelo
+            FROM alumno_consigna ac
+            LEFT JOIN entrega_codigo ec
+                ON ec.alumno_consigna_id_asignacion = ac.id_asignacion
+            LEFT JOIN correccion_codigo cc
+                ON cc.entrega_codigo_id = ec.id_entrega_codigo
+            WHERE ac.alumno_cedula_alumno = ?
+            AND ac.evaluacion_id_evaluacion = ?
+            ORDER BY ac.id_asignacion, ec.id_entrega_codigo DESC
+        `, [alumno.cedula_alumno, id])
+        const entregasPorAsignacion = new Map()
+
+        for (const entrega of entregasCodigo) {
+            if (entrega.id_entrega_codigo === null) continue
+
+            const entregas = entregasPorAsignacion.get(entrega.id_asignacion) || []
+            entregas.push({
+                id_entrega_codigo: entrega.id_entrega_codigo,
+                nombre_archivo: entrega.nombre_archivo,
+                fecha_entrega: entrega.fecha_entrega,
+                correccion_ia: entrega.estado === null
+                    ? null
+                    : {
+                        estado: entrega.estado,
+                        nota: entrega.nota,
+                        devolucion: entrega.feedback_json,
+                        mensaje: entrega.estado === "error"
+                            ? "No se pudo corregir automáticamente. La entrega se guardó; intenta nuevamente más tarde."
+                            : null,
+                        modelo: entrega.modelo
+                    }
+            })
+            entregasPorAsignacion.set(entrega.id_asignacion, entregas)
+        }
+
         return res.status(200).json({
-    evaluacion: {
-        titulo: evaluacion.titulo,
-        estado: evaluacion.estado,
-        fecha_inicio: evaluacion.fecha_inicio,
-        fecha_finalizacion: evaluacion.fecha_finalizacion
-    },
-    resultado: {
-        total_preguntas: resultados.length
-    },
-    preguntas: resultados.map(resultado => ({
-        numero: resultado.id_asignacion,
-        pregunta: resultado.consigna,
-        respuesta: resultado.respuesta
-    }))
-})
+            evaluacion: {
+                titulo: evaluacion.titulo,
+                estado: evaluacion.estado,
+                fecha_inicio: evaluacion.fecha_inicio,
+                fecha_finalizacion: evaluacion.fecha_finalizacion
+            },
+            resultado: {
+                total_preguntas: resultados.length
+            },
+            preguntas: resultados.map(resultado => ({
+                numero: resultado.id_asignacion,
+                pregunta: resultado.consigna,
+                respuesta: resultado.respuesta,
+                entregas_codigo: entregasPorAsignacion.get(resultado.id_asignacion) || []
+            }))
+        })
 
     } catch (error) {
         console.error(error)
@@ -1713,6 +1746,7 @@ const obtenerConsignas = async (req, res) => {
                 id_consigna,
                 consigna,
                 respuesta_correcta,
+                rubrica,
                 fecha_creacion
             FROM consigna
             ORDER BY fecha_creacion ${orden}
@@ -1741,7 +1775,8 @@ const obtenerConsignaPorId = async (req, res) => {
             SELECT
                 id_consigna,
                 consigna,
-                respuesta_correcta
+                respuesta_correcta,
+                rubrica
             FROM consigna
             WHERE id_consigna = ?
             `,
@@ -2588,6 +2623,7 @@ const storage = multer.diskStorage({
     }
 })
 const extensionesPermitidas = [
+    ".c",
     ".cs",
     ".java",
     ".py",
@@ -3085,13 +3121,15 @@ const extensionesFuente = new Set([
     ".html",
     ".java",
     ".js",
+    ".json",
     ".py",
+    ".txt",
     ".ts"
 ])
 
-const maxBytesFuente = 150_000
-const maxBytesEntrega = 400_000
-const maxArchivosFuente = 20
+const maxBytesFuente = 10_000_000
+const maxBytesEntrega = 10_000_000
+const maxArchivosFuente = 5
 
 const leerFuentesZip = (rutaArchivo) => new Promise((resolve, reject) => {
     yauzl.open(rutaArchivo, {
@@ -3218,19 +3256,44 @@ const validarCorreccion = (contenido) => {
         throw new Error("Ollama devolvió una corrección que no es JSON válido")
     }
 
-    const nota = Number(correccion.nota)
-    if (!Number.isFinite(nota) || nota < 0 || nota > 10) {
+    if (!correccion || typeof correccion !== "object" || Array.isArray(correccion)) {
+        throw new Error("Ollama devolvió una corrección incompleta")
+    }
+
+    const { nota, criterios } = correccion
+    if (typeof nota !== "number" || !Number.isFinite(nota) || nota < 0 || nota > 10) {
         throw new Error("Ollama devolvió una nota fuera del rango de 0 a 10")
     }
 
-    if (typeof correccion.resumen !== "string" || !Array.isArray(correccion.criterios)) {
+    if (typeof correccion.resumen !== "string" || !Array.isArray(criterios)) {
         throw new Error("Ollama devolvió una corrección incompleta")
+    }
+
+    for (const [indice, criterio] of criterios.entries()) {
+        if (
+            !criterio ||
+            typeof criterio !== "object" ||
+            Array.isArray(criterio) ||
+            typeof criterio.nombre !== "string" ||
+            !criterio.nombre.trim() ||
+            typeof criterio.comentario !== "string" ||
+            typeof criterio.puntaje !== "number" ||
+            !Number.isFinite(criterio.puntaje) ||
+            typeof criterio.maximo !== "number" ||
+            !Number.isFinite(criterio.maximo) ||
+            criterio.maximo <= 0 ||
+            criterio.maximo > 10 ||
+            criterio.puntaje < 0 ||
+            criterio.puntaje > criterio.maximo
+        ) {
+            throw new Error(`Ollama devolvió un criterio inválido en la posición ${indice}`)
+        }
     }
 
     return {
         nota: Math.round(nota * 100) / 100,
         resumen: correccion.resumen.slice(0, 3000),
-        criterios: correccion.criterios,
+        criterios,
         fortalezas: Array.isArray(correccion.fortalezas) ? correccion.fortalezas : [],
         mejoras: Array.isArray(correccion.mejoras) ? correccion.mejoras : []
     }
@@ -3253,6 +3316,8 @@ const corregirEntregaCodigo = async ({
         ON DUPLICATE KEY UPDATE
             estado = 'procesando',
             modelo = VALUES(modelo),
+            nota = NULL,
+            feedback_json = NULL,
             error_message = NULL,
             updated_at = CURRENT_TIMESTAMP
         `,
@@ -3265,9 +3330,9 @@ const corregirEntregaCodigo = async ({
         const controlador = new AbortController()
         const timeout = setTimeout(() => controlador.abort(), 120_000)
 
-        let respuestaOllama
+        let datosOllama
         try {
-            respuestaOllama = await fetch(`${baseUrl}/api/chat`, {
+            const respuestaOllama = await fetch(`${baseUrl}/api/chat`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 signal: controlador.signal,
@@ -3293,15 +3358,16 @@ const corregirEntregaCodigo = async ({
                     ]
                 })
             })
+
+            if (!respuestaOllama.ok) {
+                throw new Error(`Ollama respondió con HTTP ${respuestaOllama.status}`)
+            }
+
+            datosOllama = await respuestaOllama.json()
         } finally {
             clearTimeout(timeout)
         }
 
-        if (!respuestaOllama.ok) {
-            throw new Error(`Ollama respondió con HTTP ${respuestaOllama.status}`)
-        }
-
-        const datosOllama = await respuestaOllama.json()
         const correccion = validarCorreccion(datosOllama.message?.content || "")
 
         await pool.query(
@@ -3320,6 +3386,11 @@ const corregirEntregaCodigo = async ({
             ? "Ollama tardó demasiado en responder"
             : error.message
 
+        console.error("Error al corregir la entrega de código", {
+            idEntrega,
+            error: mensaje
+        })
+
         await pool.query(
             `
             UPDATE correccion_codigo
@@ -3332,7 +3403,7 @@ const corregirEntregaCodigo = async ({
         return {
             estado: "error",
             modelo,
-            mensaje: `${mensaje}. La entrega se guardó; vuelve a subir el archivo cuando Ollama esté disponible.`
+            mensaje: "No se pudo corregir automáticamente. La entrega se guardó; intenta nuevamente más tarde."
         }
     }
 }
@@ -3473,11 +3544,11 @@ El endpoint de subida también puede probarse directamente. El identificador ind
 curl.exe -X POST "http://localhost:2323/api/alumnos/evaluaciones/entrega/ID_ASIGNACION" -H "Authorization: Bearer TOKEN_JWT" -F "archivo=@C:\ruta\a\entrega.zip"
 ```
 
-Los resultados guardados están disponibles con `GET /api/alumnos/evaluaciones/ID_EVALUACION/resultados` usando el mismo token.
+Los resultados guardados están disponibles con `GET /api/alumnos/evaluaciones/ID_EVALUACION/resultados` usando el mismo token. Cada pregunta incluye `entregas_codigo`; cada entrega relaciona su `correccion_ia`, con `estado`, `nota`, `devolucion` (resumen, criterios, fortalezas y mejoras), `mensaje` si hubo un error y `modelo`. Si todavía no hay corrección asociada, `correccion_ia` es `null`.
 
 ## Límites
 
-- Se admiten archivos `.c`, `.cpp`, `.cs`, `.h`, `.java`, `.py`, `.ts`, `.html`, `.css` y `.js`, o un `.zip` con fuentes de esos tipos. El ZIP se lee sin extraerlo al disco; se analizan hasta 20 fuentes, 150 KB por archivo y 400 KB en total. La subida se limita a 5 MB.
+- Se admiten archivos `.c`, `.cpp`, `.cs`, `.h`, `.java`, `.py`, `.ts`, `.html`, `.css`, `.js`, `.json` y `.txt`, o un `.zip` con archivos de esos tipos. El ZIP se lee sin extraerlo al disco; se analizan hasta 20 fuentes, 150 KB por archivo y 400 KB en total. La subida se limita a 10 MB.
 - Ollama revisa estáticamente el contenido; el backend no ejecuta el código del alumno. La nota no demuestra que el programa compile o funcione.
 - La nota se genera en escala de 0 a 10 y se almacena aparte de `respuesta.nota_final`.
 - La corrección es sincrónica y puede tardar hasta dos minutos; durante ese tiempo la petición de subida sigue abierta.

@@ -12,6 +12,7 @@ const storage = multer.diskStorage({
     }
 })
 const extensionesPermitidas = [
+    ".c",
     ".cs",
     ".java",
     ".py",

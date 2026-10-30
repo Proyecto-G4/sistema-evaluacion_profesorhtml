@@ -77,11 +77,11 @@ El endpoint de subida también puede probarse directamente. El identificador ind
 curl.exe -X POST "http://localhost:2323/api/alumnos/evaluaciones/entrega/ID_ASIGNACION" -H "Authorization: Bearer TOKEN_JWT" -F "archivo=@C:\ruta\a\entrega.zip"
 ```
 
-Los resultados guardados están disponibles con `GET /api/alumnos/evaluaciones/ID_EVALUACION/resultados` usando el mismo token.
+Los resultados guardados están disponibles con `GET /api/alumnos/evaluaciones/ID_EVALUACION/resultados` usando el mismo token. Cada pregunta incluye `entregas_codigo`; cada entrega relaciona su `correccion_ia`, con `estado`, `nota`, `devolucion` (resumen, criterios, fortalezas y mejoras), `mensaje` si hubo un error y `modelo`. Si todavía no hay corrección asociada, `correccion_ia` es `null`.
 
 ## Límites
 
-- Se admiten archivos `.c`, `.cpp`, `.cs`, `.h`, `.java`, `.py`, `.ts`, `.html`, `.css` y `.js`, o un `.zip` con fuentes de esos tipos. El ZIP se lee sin extraerlo al disco; se analizan hasta 20 fuentes, 150 KB por archivo y 400 KB en total. La subida se limita a 5 MB.
+- Se admiten archivos `.c`, `.cpp`, `.cs`, `.h`, `.java`, `.py`, `.ts`, `.html`, `.css`, `.js`, `.json` y `.txt`, o un `.zip` con archivos de esos tipos. El ZIP se lee sin extraerlo al disco; se analizan hasta 20 fuentes, 150 KB por archivo y 400 KB en total. La subida se limita a 10 MB.
 - Ollama revisa estáticamente el contenido; el backend no ejecuta el código del alumno. La nota no demuestra que el programa compile o funcione.
 - La nota se genera en escala de 0 a 10 y se almacena aparte de `respuesta.nota_final`.
 - La corrección es sincrónica y puede tardar hasta dos minutos; durante ese tiempo la petición de subida sigue abierta.

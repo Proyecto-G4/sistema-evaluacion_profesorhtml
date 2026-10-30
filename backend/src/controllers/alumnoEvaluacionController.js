@@ -116,7 +116,27 @@ const iniciarEvaluacion = async (req, res) => {
         )
 
         if (asignacionesExistentes.length > 0) {
-            const [preguntasAsignadas] = await pool.query(
+            
+            const [evaluacionAlumno] = await pool.query(
+    `
+    SELECT estado
+    FROM alumno_evaluacion
+    WHERE alumno_cedula_alumno = ?
+    AND evaluacion_id_evaluacion = ?
+    `,
+    [alumno.cedula_alumno, id]
+)
+
+if (
+    evaluacionAlumno.length > 0 &&
+    evaluacionAlumno[0].estado === "finalizada"
+) {
+    return res.status(400).json({
+        mensaje: "La evaluación ya fue finalizada",
+        estado: "finalizada"
+    })
+    
+}const [preguntasAsignadas] = await pool.query(
                 `
                 SELECT
                     ac.id_asignacion,
@@ -437,7 +457,6 @@ const subirArchivo = async (req, res) => {
         const alumno = await obtenerAlumno(req, res);
 
         if (!alumno) {
-            await eliminarArchivo(req.file.path);
             return;
         }
 
@@ -457,8 +476,6 @@ const subirArchivo = async (req, res) => {
         `, [id, alumno.cedula_alumno]);
 
         if (asignaciones.length === 0) {
-            await eliminarArchivo(req.file.path);
-
             return res.status(404).json({
                 mensaje: "No se encontró la pregunta asignada al alumno"
             });
@@ -478,16 +495,12 @@ const subirArchivo = async (req, res) => {
         ]);
 
         if (evaluacionesAlumno.length === 0) {
-            await eliminarArchivo(req.file.path);
-
             return res.status(404).json({
                 mensaje: "No se encontró el registro de la evaluación"
             });
         }
 
         if (evaluacionesAlumno[0].estado === "finalizada") {
-            await eliminarArchivo(req.file.path);
-
             return res.status(400).json({
                 mensaje: "La evaluación ya fue finalizada"
             });
@@ -529,15 +542,15 @@ const subirArchivo = async (req, res) => {
         });
 
     } catch (error) {
-        if (req.file && !archivoRegistrado) {
-            await eliminarArchivo(req.file.path);
-        }
-
         console.error(error);
 
         return res.status(500).json({
             mensaje: "Error interno del servidor"
         });
+    } finally {
+        if (req.file && !archivoRegistrado) {
+            await eliminarArchivo(req.file.path);
+        }
     }
 };
 const obtenerResultadoEvaluacion = async (req, res) => {
@@ -570,22 +583,62 @@ const obtenerResultadoEvaluacion = async (req, res) => {
             AND ac.evaluacion_id_evaluacion = ?
             ORDER BY ac.id_asignacion
         `, [alumno.cedula_alumno, id])
+        const [entregasCodigo] = await pool.query(`
+            SELECT ac.id_asignacion, ec.id_entrega_codigo,
+                   ec.nombre_archivo, ec.fecha_entrega,
+                   cc.estado, cc.nota, cc.feedback_json,
+                   cc.modelo
+            FROM alumno_consigna ac
+            LEFT JOIN entrega_codigo ec
+                ON ec.alumno_consigna_id_asignacion = ac.id_asignacion
+            LEFT JOIN correccion_codigo cc
+                ON cc.entrega_codigo_id = ec.id_entrega_codigo
+            WHERE ac.alumno_cedula_alumno = ?
+            AND ac.evaluacion_id_evaluacion = ?
+            ORDER BY ac.id_asignacion, ec.id_entrega_codigo DESC
+        `, [alumno.cedula_alumno, id])
+        const entregasPorAsignacion = new Map()
+
+        for (const entrega of entregasCodigo) {
+            if (entrega.id_entrega_codigo === null) continue
+
+            const entregas = entregasPorAsignacion.get(entrega.id_asignacion) || []
+            entregas.push({
+                id_entrega_codigo: entrega.id_entrega_codigo,
+                nombre_archivo: entrega.nombre_archivo,
+                fecha_entrega: entrega.fecha_entrega,
+                correccion_ia: entrega.estado === null
+                    ? null
+                    : {
+                        estado: entrega.estado,
+                        nota: entrega.nota,
+                        devolucion: entrega.feedback_json,
+                        mensaje: entrega.estado === "error"
+                            ? "No se pudo corregir automáticamente. La entrega se guardó; intenta nuevamente más tarde."
+                            : null,
+                        modelo: entrega.modelo
+                    }
+            })
+            entregasPorAsignacion.set(entrega.id_asignacion, entregas)
+        }
+
         return res.status(200).json({
-    evaluacion: {
-        titulo: evaluacion.titulo,
-        estado: evaluacion.estado,
-        fecha_inicio: evaluacion.fecha_inicio,
-        fecha_finalizacion: evaluacion.fecha_finalizacion
-    },
-    resultado: {
-        total_preguntas: resultados.length
-    },
-    preguntas: resultados.map(resultado => ({
-        numero: resultado.id_asignacion,
-        pregunta: resultado.consigna,
-        respuesta: resultado.respuesta
-    }))
-})
+            evaluacion: {
+                titulo: evaluacion.titulo,
+                estado: evaluacion.estado,
+                fecha_inicio: evaluacion.fecha_inicio,
+                fecha_finalizacion: evaluacion.fecha_finalizacion
+            },
+            resultado: {
+                total_preguntas: resultados.length
+            },
+            preguntas: resultados.map(resultado => ({
+                numero: resultado.id_asignacion,
+                pregunta: resultado.consigna,
+                respuesta: resultado.respuesta,
+                entregas_codigo: entregasPorAsignacion.get(resultado.id_asignacion) || []
+            }))
+        })
 
     } catch (error) {
         console.error(error)

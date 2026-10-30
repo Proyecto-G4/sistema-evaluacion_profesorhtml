@@ -12,13 +12,15 @@ const extensionesFuente = new Set([
     ".html",
     ".java",
     ".js",
+    ".json",
     ".py",
+    ".txt",
     ".ts"
 ])
 
-const maxBytesFuente = 150_000
-const maxBytesEntrega = 400_000
-const maxArchivosFuente = 20
+const maxBytesFuente = 10_000_000
+const maxBytesEntrega = 10_000_000
+const maxArchivosFuente = 5
 
 const leerFuentesZip = (rutaArchivo) => new Promise((resolve, reject) => {
     yauzl.open(rutaArchivo, {
@@ -145,19 +147,44 @@ const validarCorreccion = (contenido) => {
         throw new Error("Ollama devolvió una corrección que no es JSON válido")
     }
 
-    const nota = Number(correccion.nota)
-    if (!Number.isFinite(nota) || nota < 0 || nota > 10) {
+    if (!correccion || typeof correccion !== "object" || Array.isArray(correccion)) {
+        throw new Error("Ollama devolvió una corrección incompleta")
+    }
+
+    const { nota, criterios } = correccion
+    if (typeof nota !== "number" || !Number.isFinite(nota) || nota < 0 || nota > 10) {
         throw new Error("Ollama devolvió una nota fuera del rango de 0 a 10")
     }
 
-    if (typeof correccion.resumen !== "string" || !Array.isArray(correccion.criterios)) {
+    if (typeof correccion.resumen !== "string" || !Array.isArray(criterios)) {
         throw new Error("Ollama devolvió una corrección incompleta")
+    }
+
+    for (const [indice, criterio] of criterios.entries()) {
+        if (
+            !criterio ||
+            typeof criterio !== "object" ||
+            Array.isArray(criterio) ||
+            typeof criterio.nombre !== "string" ||
+            !criterio.nombre.trim() ||
+            typeof criterio.comentario !== "string" ||
+            typeof criterio.puntaje !== "number" ||
+            !Number.isFinite(criterio.puntaje) ||
+            typeof criterio.maximo !== "number" ||
+            !Number.isFinite(criterio.maximo) ||
+            criterio.maximo <= 0 ||
+            criterio.maximo > 10 ||
+            criterio.puntaje < 0 ||
+            criterio.puntaje > criterio.maximo
+        ) {
+            throw new Error(`Ollama devolvió un criterio inválido en la posición ${indice}`)
+        }
     }
 
     return {
         nota: Math.round(nota * 100) / 100,
         resumen: correccion.resumen.slice(0, 3000),
-        criterios: correccion.criterios,
+        criterios,
         fortalezas: Array.isArray(correccion.fortalezas) ? correccion.fortalezas : [],
         mejoras: Array.isArray(correccion.mejoras) ? correccion.mejoras : []
     }
@@ -180,6 +207,8 @@ const corregirEntregaCodigo = async ({
         ON DUPLICATE KEY UPDATE
             estado = 'procesando',
             modelo = VALUES(modelo),
+            nota = NULL,
+            feedback_json = NULL,
             error_message = NULL,
             updated_at = CURRENT_TIMESTAMP
         `,
@@ -192,9 +221,9 @@ const corregirEntregaCodigo = async ({
         const controlador = new AbortController()
         const timeout = setTimeout(() => controlador.abort(), 120_000)
 
-        let respuestaOllama
+        let datosOllama
         try {
-            respuestaOllama = await fetch(`${baseUrl}/api/chat`, {
+            const respuestaOllama = await fetch(`${baseUrl}/api/chat`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 signal: controlador.signal,
@@ -220,15 +249,16 @@ const corregirEntregaCodigo = async ({
                     ]
                 })
             })
+
+            if (!respuestaOllama.ok) {
+                throw new Error(`Ollama respondió con HTTP ${respuestaOllama.status}`)
+            }
+
+            datosOllama = await respuestaOllama.json()
         } finally {
             clearTimeout(timeout)
         }
 
-        if (!respuestaOllama.ok) {
-            throw new Error(`Ollama respondió con HTTP ${respuestaOllama.status}`)
-        }
-
-        const datosOllama = await respuestaOllama.json()
         const correccion = validarCorreccion(datosOllama.message?.content || "")
 
         await pool.query(
@@ -247,6 +277,11 @@ const corregirEntregaCodigo = async ({
             ? "Ollama tardó demasiado en responder"
             : error.message
 
+        console.error("Error al corregir la entrega de código", {
+            idEntrega,
+            error: mensaje
+        })
+
         await pool.query(
             `
             UPDATE correccion_codigo
@@ -259,7 +294,7 @@ const corregirEntregaCodigo = async ({
         return {
             estado: "error",
             modelo,
-            mensaje: `${mensaje}. La entrega se guardó; vuelve a subir el archivo cuando Ollama esté disponible.`
+            mensaje: "No se pudo corregir automáticamente. La entrega se guardó; intenta nuevamente más tarde."
         }
     }
 }

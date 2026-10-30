@@ -85,6 +85,7 @@ const obtenerConsignas = async (req, res) => {
                 id_consigna,
                 consigna,
                 respuesta_correcta,
+                rubrica,
                 fecha_creacion
             FROM consigna
             ORDER BY fecha_creacion ${orden}
@@ -113,7 +114,8 @@ const obtenerConsignaPorId = async (req, res) => {
             SELECT
                 id_consigna,
                 consigna,
-                respuesta_correcta
+                respuesta_correcta,
+                rubrica
             FROM consigna
             WHERE id_consigna = ?
             `,
