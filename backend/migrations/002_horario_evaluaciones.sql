@@ -1,0 +1,3 @@
+ALTER TABLE evaluacion
+    ADD COLUMN hora TIME NULL AFTER fecha,
+    ADD COLUMN duracion SMALLINT UNSIGNED NULL AFTER hora;
