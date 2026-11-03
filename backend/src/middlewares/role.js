@@ -77,9 +77,46 @@ const roleAdmin = (req, res, next) => {
         })
     }
 }
+/**
+ * Valida que ese usuario sea admin o profesor
+ *
+ * @param {import('express').Request} req
+ * @param {import('express').Response} res
+ * @param {import('express').NextFunction} next
+ */
+
+const roleRevisorCuenta = (req, res, next) => {
+    if (!["admin", "profesor"].includes(req.user?.rol)) {
+        return res.status(403).json({
+            mensaje: "Solo un docente o administrador puede revisar solicitudes"
+        })
+    }
+
+    next()
+}
+
+/**
+ * Valida que el solicitante de la informacion sea alumno o docente
+ *
+ * @param {import('express').Request} req
+ * @param {import('express').Response} res
+ * @param {import('express').NextFunction} next
+ */
+
+const roleSolicitanteCuenta = (req, res, next) => {
+    if (!["alumno", "profesor"].includes(req.user?.rol)) {
+        return res.status(403).json({
+            mensaje: "Solo alumnos y docentes pueden solicitar acciones sobre cuentas"
+        })
+    }
+
+    next()
+}
 
 export {
     roleProfesor,
     roleAlumno,
-    roleAdmin
+    roleAdmin,
+    roleRevisorCuenta,
+    roleSolicitanteCuenta
 }

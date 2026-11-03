@@ -1,59 +1,72 @@
 import jwt from "jsonwebtoken"
+import { pool } from "../config/database.js"
 
-/**
- * Valida token antes de pasar al controlador
- * 
- * @param {import('express').Request} req
- * @param {import('express').Response} res
- * @param {import('express').NextFunction} next
- */
-
-
-const auth = (req, res, next) => {
+const auth = async (req, res, next) => {
     try {
-        // Obtengo autorización
-        const authHeader = req.headers.authorization;
+        const authHeader = req.headers.authorization
 
-        // Verifico si envió token
         if (!authHeader) {
             return res.status(401).json({
                 mensaje: "Token no proporcionado"
-            });
+            })
         }
 
-        // Obtengo el token
-        const token = authHeader.split(" ")[1];
+        const [tipo, token] = authHeader.split(" ")
 
-        // Verifico si existe el token
-        if (!token) {
+        if (tipo !== "Bearer" || !token) {
             return res.status(401).json({
-                mensaje: "Acceso denegado"
-            });
+                mensaje: "Formato de autorización inválido"
+            })
         }
 
-        // Verifico JWT y guardo el decoded en req.user
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        req.user = decoded;
+        const decoded = jwt.verify(token, process.env.JWT_SECRET)
+
+        const [cuentas] = await pool.query(
+            `
+            SELECT id_login, usuario, rol, estado
+            FROM login
+            WHERE id_login = ?
+            `,
+            [decoded.id]
+        )
+
+        if (cuentas.length === 0) {
+            return res.status(401).json({
+                mensaje: "La cuenta asociada al token ya no existe"
+            })
+        }
+
+        const cuenta = cuentas[0]
+
+        if (cuenta.estado !== "activo") {
+            return res.status(403).json({
+                mensaje: cuenta.estado === "suspendido"
+                    ? "La cuenta está suspendida"
+                    : "La cuenta está eliminada"
+            })
+        }
+
+        // Se usan los datos vigentes de la base, no el rol viejo del token.
+        req.user = {
+            id: cuenta.id_login,
+            usuario: cuenta.usuario,
+            rol: cuenta.rol
+        }
 
         next()
-
     } catch (error) {
-
-        // Si el token es inválido
-        if (error.name === "JsonWebTokenError") {
+        if (
+            error.name === "JsonWebTokenError" ||
+            error.name === "TokenExpiredError"
+        ) {
             return res.status(401).json({
-                mensaje: "Token Inválido"
-            });
+                mensaje: error.name === "TokenExpiredError"
+                    ? "Token caducado"
+                    : "Token inválido"
+            })
         }
 
-        // Si el token expiró
-        if (error.name === "TokenExpiredError") {
-            return res.status(401).json({
-                mensaje: "Token caducado"
-            });
-        }
-
-        console.error(error);
+        console.error(error)
 
         return res.status(500).json({
             mensaje: "Error interno del servidor"

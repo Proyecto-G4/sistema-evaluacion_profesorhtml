@@ -8,6 +8,7 @@ import consignaRoutes from "./routes/consignaRoutes.js"
 import evaluacionRoutes from "./routes/evaluacionRoutes.js"
 import claseRoutes from "./routes/claseRoutes.js"
 import helmet from "helmet"
+import cuentaRoutes from "./routes/cuentaRoutes.js"
 
 const app = express()
 
@@ -23,5 +24,6 @@ app.use("/api/auth", authRoutes)
 app.use("/api/consignas", consignaRoutes)
 app.use("/api/evaluaciones", evaluacionRoutes)
 app.use("/api/clases", claseRoutes)
+app.use("/api/cuentas", cuentaRoutes)
 
 export default app
