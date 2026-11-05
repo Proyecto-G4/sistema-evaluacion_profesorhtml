@@ -12,13 +12,12 @@ import cuentaRoutes from "./routes/cuentaRoutes.js"
 import dotenv from "dotenv"
 import { fileURLToPath } from "node:url"
 
-// Carga la configuración antes de construir CORS, también si app.js se importa directamente.
+
 dotenv.config({ path: fileURLToPath(new URL("../.env", import.meta.url)) })
 
 const app = express()
 
 app.use(helmet())
-// Restringe el acceso desde navegador a los orígenes configurados en despliegue.
 const origins = (process.env.CORS_ORIGINS || "http://localhost:5173")
     .split(",")
     .map(origin => origin.trim())
