@@ -141,25 +141,22 @@ const crearEvaluacion = async (req, res) => {
 
 const obtenerEvaluacionesProfesor = async (req, res) => {
     try {
-        // Parámetros recibidos por la URL
+       
         const ordenarPor = req.query.ordenarPor || "fecha"
         const orden = req.query.orden || "desc"
 
-        // Validar el campo por el que se quiere ordenar
         if (!["fecha", "id"].includes(ordenarPor)) {
             return res.status(400).json({
                 mensaje: "El campo de orden debe ser 'fecha' o 'id'"
             })
         }
 
-        // Validar la dirección del orden
         if (!["asc", "desc"].includes(orden)) {
             return res.status(400).json({
                 mensaje: "El orden debe ser 'asc' o 'desc'"
             })
         }
 
-        // Seleccionar la columna de forma segura
         const columnaOrden = ordenarPor === "fecha"
             ? "e.fecha"
             : "e.id_evaluacion"
@@ -500,7 +497,6 @@ const obtenerResultadosProfesor = async (req, res) => {
             return res.status(400).json({ mensaje: "El ID de la evaluación no es válido" })
         }
 
-        // Primero se confirma propiedad de la evaluación antes de leer datos de alumnos.
         const [evaluaciones] = await pool.query(`
             SELECT e.id_evaluacion, e.id_clase, e.titulo
             FROM evaluacion e
@@ -594,7 +590,7 @@ const calificarRespuestaAlumno = async (req, res) => {
             return res.status(400).json({ mensaje: "La nota debe ser un número entre 0 y 10" })
         }
 
-        // El UPDATE queda limitado a respuestas de evaluaciones del docente autenticado.
+
         const [resultado] = await pool.query(`
             UPDATE respuesta r
             INNER JOIN alumno_consigna ac
@@ -612,7 +608,6 @@ const calificarRespuestaAlumno = async (req, res) => {
         `, [nota, idRespuesta, idEvaluacion, req.user.id])
 
         if (resultado.affectedRows === 0) {
-            // MySQL puede informar cero filas modificadas cuando se vuelve a guardar la misma nota.
             const [existentes] = await pool.query(`
                 SELECT r.id_respuesta
                 FROM respuesta r

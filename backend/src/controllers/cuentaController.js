@@ -11,19 +11,16 @@ const obtenerSolicitudesAltaAlumno = async (req, res) => {
             })
         }
 
-        // Los docentes solo revisan solicitudes pendientes
         if (req.user.rol === "profesor" && estado !== "pendiente") {
             return res.status(403).json({
                 mensaje: "Los docentes solo pueden consultar solicitudes pendientes"
             })
         }
 
-        // Si buscamos todos los estados no añadimos ningun filtro, caso contrario agregamos
         const filtroEstado = estado === "todas"
             ? ""
             : "AND s.estado = ?"
 
-        // Preparamos los parametros para enviarlos a MySQL
         const parametros = estado === "todas" ? [] : [estado]
 
         const [solicitudes] = await pool.query(
@@ -71,7 +68,6 @@ const resolverSolicitudAltaAlumno = async (req, res) => {
         conexion = await pool.getConnection()
         await conexion.beginTransaction()
 
-        // El bloqueo evita que dos revisores resuelvan la misma solicitud a la vez
         const [solicitudes] = await conexion.query(
             `
             SELECT
@@ -105,7 +101,6 @@ const resolverSolicitudAltaAlumno = async (req, res) => {
 
         let cuentaCreadaId = null
 
-        // Verifico si la decision es "aprobar"
         if (decision === "aprobar") {
             const [cuentasExistentes] = await conexion.query(
                 `
@@ -153,7 +148,6 @@ const resolverSolicitudAltaAlumno = async (req, res) => {
             ? motivo.trim()
             : null
 
-        // Al resolver, se borra el hash de contraseña de la solicitud
         await conexion.query(
             `
             UPDATE solicitud_alta_alumno
@@ -177,7 +171,6 @@ const resolverSolicitudAltaAlumno = async (req, res) => {
             ]
         )
 
-        // Registra quien tomo la decision y cual fue
         await conexion.query(
             `
             INSERT INTO auditoria_cuenta (
@@ -279,7 +272,6 @@ const cambiarEstadoCuenta = async (req, res) => {
         const idCuenta = Number(req.params.id)
         const { estado, motivo } = req.body
 
-        // Evita que el administrador que esta usando la sesion se bloquee a si mismo
         if (idCuenta === Number(req.user.id) && estado !== "activo") {
             return res.status(400).json({
                 mensaje: "No podés suspender ni eliminar tu propia cuenta"
@@ -570,8 +562,6 @@ const resolverSolicitudGestion = async (req, res) => {
         conexion = await pool.getConnection()
         await conexion.beginTransaction()
 
-        // Primero leemos el ID objetivo sin bloquear
-        // despues bloqueamos la cuenta y la solicitud en ese orden
         const [referencias] = await conexion.query(
             `SELECT cuenta_objetivo_id
              FROM solicitud_gestion_cuenta

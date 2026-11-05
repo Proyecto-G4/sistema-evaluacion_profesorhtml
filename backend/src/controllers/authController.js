@@ -19,11 +19,9 @@ const crearUsuario = async (req, res) => {
     try {
         const { usuario, password, cedula } = req.body
 
-        // La transaccion mantiene juntas la solicitud y su evento de auditoria
         conexion = await pool.getConnection()
         await conexion.beginTransaction()
 
-        // Bloquea el perfil mientras comprobamos si ya tiene una cuenta o solicitud
         const [alumnos] = await conexion.query(
             `SELECT cedula_alumno
              FROM alumno
@@ -69,7 +67,6 @@ const crearUsuario = async (req, res) => {
             })
         }
 
-        // Solo codificamos cuando sabemos que se creara la solicitud
         const passwordHash = await bcrypt.hash(password, 10)
         const tokenConsulta = randomBytes(32).toString("base64url")
         const tokenConsultaHash = hashConsulta(tokenConsulta)
@@ -179,14 +176,12 @@ const consultarSolicitudAlumno = async (req, res) => {
 
 const crearCuentaProfesor = async (req, res) => {
     try {
-        // Recibo datos enviados
         const {
             cedula_profesor,
             usuario,
             password,
         } = req.body;
 
-        // Valido si la cedula recibida corresponde a un profe existente
         const [profesores] = await pool.query(
             `
             SELECT cedula_profesor
@@ -202,7 +197,6 @@ const crearCuentaProfesor = async (req, res) => {
             })
         }
 
-        // Valido si el profesor ya tiene cuenta
         const [cuentasProfesor] = await pool.query (
             `
             SELECT id_login
@@ -218,7 +212,6 @@ const crearCuentaProfesor = async (req, res) => {
             })
         }
 
-        // Valido si ya existe el usuario
         const [usuarios] = await pool.query (
             `
             SELECT id_login
@@ -234,10 +227,8 @@ const crearCuentaProfesor = async (req, res) => {
             })
         }
 
-        // Codifico la contraseña
         const passwordHash = await bcrypt.hash(password, 10)
 
-        // Inserto los datos validados anteriormente
         await pool.query (
             `
             INSERT INTO login (
@@ -273,10 +264,8 @@ const crearCuentaProfesor = async (req, res) => {
 
 const login = async (req, res) => {
     try {
-        // Recibo los datos validados por el middleware
         const {usuario, password} = req.body;
 
-        // Verifico que ese usuario exista
         const [usuarios] = await pool.query(
             `
             SELECT *
@@ -292,10 +281,8 @@ const login = async (req, res) => {
             });
         }
 
-        // Usuario encontrado
         const usuarioEncontrado = usuarios[0];
 
-        // Comparo contraseñas para verificar que haya puesto la correcta
         const passwordCorrecta = await bcrypt.compare(
             password,
             usuarioEncontrado.password_hash
@@ -315,7 +302,6 @@ const login = async (req, res) => {
             })
         }
 
-        // Roles se emiten normalizados para mantener un contrato estable con Vue y los guards.
         const rol = String(usuarioEncontrado.rol || "").trim().toLowerCase()
         if (!["alumno", "profesor", "admin"].includes(rol)) {
             return res.status(403).json({ mensaje: "El rol de la cuenta no es válido" })

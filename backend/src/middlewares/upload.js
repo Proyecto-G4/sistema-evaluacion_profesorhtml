@@ -3,7 +3,6 @@ import path from "node:path"
 import fs from "node:fs"
 import { fileURLToPath } from "node:url"
 
-// La carpeta se fija junto al backend para que la carga no dependa del cwd.
 const uploadsDir = fileURLToPath(new URL("../../uploads/", import.meta.url))
 fs.mkdirSync(uploadsDir, { recursive: true })
 

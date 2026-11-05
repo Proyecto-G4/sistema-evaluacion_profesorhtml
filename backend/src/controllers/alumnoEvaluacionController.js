@@ -601,7 +601,6 @@ const subirArchivo = async (req, res) => {
             `, [req.file.originalname, req.file.path, asignacion.id_asignacion])
             resultado = insertado
 
-            // La respuesta y su archivo deben persistir juntos para permitir finalizar.
             await conexion.query(`
                 UPDATE alumno_consigna
                 SET estado = 'respondida'

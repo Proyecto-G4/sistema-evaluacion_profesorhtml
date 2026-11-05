@@ -3,7 +3,6 @@ import dotenv from "dotenv"
 import fs from "node:fs"
 import { fileURLToPath } from "node:url"
 
-// Mantiene la configuración anclada al backend y evita depender del cwd.
 dotenv.config({ path: fileURLToPath(new URL("../../.env", import.meta.url)) })
 
 /**

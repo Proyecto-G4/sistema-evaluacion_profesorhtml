@@ -46,11 +46,9 @@ const auth = async (req, res, next) => {
             })
         }
 
-        // Se usan los datos vigentes de la base, no el rol viejo del token.
         req.user = {
             id: cuenta.id_login,
             usuario: cuenta.usuario,
-            // Unifica el rol vigente antes de aplicar middleware y lógica de controladores.
             rol: String(cuenta.rol || "").trim().toLowerCase()
         }
 

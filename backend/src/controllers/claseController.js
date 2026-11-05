@@ -2,10 +2,8 @@
 
 const crearClase = async (req, res) => {
     try {
-        // Recibo datos 
         const { nombre, periodo_lectivo } = req.body
 
-        // Obtenemos la cedula del profesor desde la base de datos
         const [profesores] = await pool.query(
             `
             SELECT profesor_cedula_profesor
@@ -91,7 +89,6 @@ const inscribirALumnoEnClase = async (req, res) => {
         const idClase = req.params.id_clase
         const cedulaAlumno = req.body.cedula_alumno
 
-        // Compruebo que la clase pertenece al profesor autenticado
         const [clases] = await pool.query(
             `
             SELECT c.id_clase
@@ -111,7 +108,6 @@ const inscribirALumnoEnClase = async (req, res) => {
             })
         }
 
-        // Compruebo que la cedula corresponde a un alumno existente
         const [alumnos] = await pool.query(
             `
             SELECT cedula_alumno
@@ -127,7 +123,6 @@ const inscribirALumnoEnClase = async (req, res) => {
             })
         }
 
-        // Inserto los datos validos
         await pool.query(
             `
             INSERT INTO clase_alumno (
@@ -162,7 +157,6 @@ const obtenerAlumnosDeClase = async (req, res) => {
     try {
         const idClase = req.params.id_clase
 
-        // Verificar que la clase pertenezca al profesor autenticado
         const [clases] = await pool.query(
             `
             SELECT c.id_clase
@@ -182,7 +176,6 @@ const obtenerAlumnosDeClase = async (req, res) => {
             })
         }
 
-        // Listo los alumnos inscritos en una clase
         const [alumnos] = await pool.query(
             `
             SELECT 
@@ -214,12 +207,10 @@ const obtenerAlumnosDeClase = async (req, res) => {
 
 const actualizarEstadoAlumnoEnClase = async (req, res) => {
     try {
-        // Recibo los datos y los valido
         const idClase = req.params.id_clase
         const cedulaAlumno = req.params.cedula_alumno
         const estado = req.body?.estado
 
-        // Compruebo que la clase pertenece al profesor autenticado
         const [clases] = await pool.query(
             `
             SELECT c.id_clase
@@ -239,7 +230,6 @@ const actualizarEstadoAlumnoEnClase = async (req, res) => {
             })
         }
 
-        // Compruebo que el alumno estÃ¡ inscrito en esa clase
         const [inscripciones] = await pool.query(
             `
             SELECT alumno_cedula_alumno
@@ -256,7 +246,6 @@ const actualizarEstadoAlumnoEnClase = async (req, res) => {
             })
         }
 
-        // Actualizo los datos del alumno
         await pool.query(
             `
             UPDATE clase_alumno
@@ -287,7 +276,6 @@ export {
     obtenerAlumnosDeClase,
     actualizarEstadoAlumnoEnClase
 }
-
 
 
 

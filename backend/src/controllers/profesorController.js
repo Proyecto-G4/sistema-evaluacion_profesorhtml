@@ -155,14 +155,12 @@ const actualizarProfesor = async (req, res) => {
         const {cedula} = req.params;
         const {nombre, apellido, correo} = req.body;
 
-        // Validar que todos los campos obligatorios hayan sido enviados
         if (!nombre || !apellido || !correo) {
             return res.status(400).json({
                 mensaje: "Faltan campos obligatorios"
             });
         }
 
-        // Comprobar que el profesor exista
         const [profesores] = await pool.query(
             `
             SELECT *
@@ -178,7 +176,6 @@ const actualizarProfesor = async (req, res) => {
             });
         }
 
-        // Comprobar si el correo pertenece a otro registro
         const [correoExistente] = await pool.query(
             `
             SELECT cedula_profesor
@@ -195,7 +192,6 @@ const actualizarProfesor = async (req, res) => {
             });
         }
 
-        // Actualizar el profesor
         await pool.query(
             `
             UPDATE profesor
@@ -229,10 +225,8 @@ const actualizarProfesor = async (req, res) => {
 
 const eliminarProfesor = async (req, res) => {
     try {
-        // Recibo la cedula por la URL
         const {cedula} = req.params;
 
-        // Verifico que exista el profesor
         const [profesor] = await pool.query(
             `
             SELECT cedula_profesor
@@ -248,7 +242,6 @@ const eliminarProfesor = async (req, res) => {
             });
         }
 
-        // Elimino registro
         await pool.query(
             `DELETE from profesor
             WHERE cedula_profesor = ?

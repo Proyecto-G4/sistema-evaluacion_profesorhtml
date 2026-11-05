@@ -154,14 +154,12 @@ const actualizarAlumno = async (req, res) => {
         const {cedula} = req.params;
         const {nombre, apellido, correo} = req.body;
 
-        // Validar que todos los campos obligatorios hayan sido enviados
         if (!nombre || !apellido || !correo) {
             return res.status(400).json({
                 mensaje: "Faltan campos obligatorios"
             });
         }
 
-        // Comprobar que el alumno exista
         const [alumnos] = await pool.query(
             `
             SELECT * 
@@ -177,7 +175,6 @@ const actualizarAlumno = async (req, res) => {
             });
         }
 
-        // Comprobar si el correo pertenece a otro registro
         const [correoExistente] = await pool.query(
             `
             SELECT cedula_alumno
@@ -194,7 +191,6 @@ const actualizarAlumno = async (req, res) => {
             });
         }
 
-        // Actualizo el alumno
         await pool.query(
             `
             UPDATE alumno
