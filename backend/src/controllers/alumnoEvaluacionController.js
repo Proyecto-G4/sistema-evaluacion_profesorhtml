@@ -20,6 +20,57 @@ const obtenerAlumno = async (req, res) => {
 const eliminarArchivo = async (ruta) => {
     if (ruta) await fs.unlink(ruta).catch(() => {})
 }
+
+const verificarTiempoEvaluacion = async (cedulaAlumno, idEvaluacion) => {
+    const [filas] = await pool.query(
+        `
+        SELECT
+            ae.estado,
+            ae.fecha_inicio,
+            ae.fecha_finalizacion,
+            e.duracion,
+            TIMESTAMPDIFF(
+                SECOND,
+                NOW(),
+                DATE_ADD(ae.fecha_inicio, INTERVAL e.duracion MINUTE)
+            ) AS segundos_restantes
+        FROM alumno_evaluacion ae
+        INNER JOIN evaluacion e
+            ON e.id_evaluacion = ae.evaluacion_id_evaluacion
+        WHERE ae.alumno_cedula_alumno = ?
+        AND ae.evaluacion_id_evaluacion = ?
+        `,
+        [cedulaAlumno, idEvaluacion]
+    )
+
+    if (filas.length === 0) return null
+
+    const evaluacion = filas[0]
+
+    if (
+        evaluacion.estado === "en_progreso" &&
+        evaluacion.duracion !== null &&
+        Number(evaluacion.segundos_restantes) <= 0
+    ) {
+        await pool.query(
+            `
+            UPDATE alumno_evaluacion
+            SET
+                estado = 'finalizada',
+                fecha_finalizacion = NOW()
+            WHERE alumno_cedula_alumno = ?
+            AND evaluacion_id_evaluacion = ?
+            AND estado = 'en_progreso'
+            `,
+            [cedulaAlumno, idEvaluacion]
+        )
+
+        evaluacion.estado = "finalizada"
+        evaluacion.segundos_restantes = 0
+    }
+
+    return evaluacion
+}
 const obtenerMiPerfil = async (req, res) => {
     try {
         const [usuarios] = await pool.query(`
@@ -86,7 +137,8 @@ const iniciarEvaluacion = async (req, res) => {
                 e.descripcion,
                 e.fecha,
                 e.tipo,
-                e.cantidad_preguntas
+                e.cantidad_preguntas,
+                e.duracion
             FROM evaluacion e
             INNER JOIN clase_alumno ca
                 ON ca.id_clase = e.id_clase
@@ -115,8 +167,19 @@ const iniciarEvaluacion = async (req, res) => {
             [alumno.cedula_alumno, id]
         )
 
-        if (asignacionesExistentes.length > 0) {
-            
+    if (asignacionesExistentes.length > 0) {
+        
+        const tiempoEvaluacion = await verificarTiempoEvaluacion(
+        alumno.cedula_alumno,
+        id
+    )
+
+    if (!tiempoEvaluacion || tiempoEvaluacion.estado === "finalizada") {
+        return res.status(400).json({
+            mensaje: "La evaluación ya fue finalizada o se agotó el tiempo",
+            estado: "finalizada"
+        })
+}
             const [evaluacionAlumno] = await pool.query(
     `
     SELECT estado
@@ -154,10 +217,15 @@ if (
             )
 
             return res.status(200).json({
-                mensaje: "La evaluación ya fue iniciada",
-                preguntas_asignadas: preguntasAsignadas
-            })
-        }
+    mensaje: "La evaluación ya fue iniciada",
+    preguntas_asignadas: preguntasAsignadas,
+    duracion: tiempoEvaluacion.duracion,
+    segundos_restantes: Math.max(
+        0,
+        Number(tiempoEvaluacion.segundos_restantes)
+    )
+})
+}
 
         const cantidadSolicitada = Number(evaluacion.cantidad_preguntas)
 
@@ -314,8 +382,16 @@ const guardarRespuesta = async (req, res) => {
             })
         }
 
-        if (evaluacionesAlumno[0].estado === "finalizada") {
-            return res.status(400).json({ mensaje: "La evaluación ya fue finalizada" })
+        const tiempoEvaluacion = await verificarTiempoEvaluacion(
+    alumno.cedula_alumno,
+    asignacion.evaluacion_id_evaluacion
+)
+
+        if (!tiempoEvaluacion || tiempoEvaluacion.estado === "finalizada") {
+            return res.status(400).json({
+                mensaje: "La evaluación ya fue finalizada o se agotó el tiempo",
+                estado: "finalizada"
+            })
         }
         const [respuestasExistentes] = await pool.query(`
             SELECT id_respuesta
@@ -360,6 +436,15 @@ const obtenerProgresoEvaluacion = async (req, res) => {
         const { id } = req.params
         const alumno = await obtenerAlumno(req, res)
         if (!alumno) return
+        const tiempoEvaluacion = await verificarTiempoEvaluacion(
+                alumno.cedula_alumno,
+                id)
+
+            if (!tiempoEvaluacion) {
+                return res.status(404).json({
+                    mensaje: "El alumno no tiene esta evaluación iniciada"
+                })
+            }
         const [progreso] = await pool.query(`
             SELECT ac.id_asignacion, ac.consigna_id_consigna, ac.estado, c.consigna
             FROM alumno_consigna ac
@@ -380,6 +465,12 @@ const obtenerProgresoEvaluacion = async (req, res) => {
 
         return res.status(200).json({
             evaluacion_id: Number(id),
+            estado: tiempoEvaluacion.estado,
+            duracion: tiempoEvaluacion.duracion,
+            segundos_restantes: Math.max(
+                0,
+                Number(tiempoEvaluacion.segundos_restantes)
+            ),
             total_preguntas: progreso.length,
             respondidas,
             pendientes: progreso.length - respondidas,
@@ -483,26 +574,15 @@ const subirArchivo = async (req, res) => {
 
         const asignacion = asignaciones[0];
 
-        const [evaluacionesAlumno] = await pool.query(`
-            SELECT estado
-            FROM alumno_evaluacion
-            WHERE
-                alumno_cedula_alumno = ?
-                AND evaluacion_id_evaluacion = ?
-        `, [
+        const tiempoEvaluacion = await verificarTiempoEvaluacion(
             alumno.cedula_alumno,
             asignacion.evaluacion_id_evaluacion
-        ]);
+        );
 
-        if (evaluacionesAlumno.length === 0) {
-            return res.status(404).json({
-                mensaje: "No se encontró el registro de la evaluación"
-            });
-        }
-
-        if (evaluacionesAlumno[0].estado === "finalizada") {
+        if (!tiempoEvaluacion || tiempoEvaluacion.estado === "finalizada") {
             return res.status(400).json({
-                mensaje: "La evaluación ya fue finalizada"
+                mensaje: "La evaluación ya fue finalizada o se agotó el tiempo",
+                estado: "finalizada"
             });
         }
 

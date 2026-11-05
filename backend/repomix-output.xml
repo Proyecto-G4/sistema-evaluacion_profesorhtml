@@ -44,6 +44,8 @@ certs/
   ca.pem
 migrations/
   001_ollama_correcciones.sql
+  002_horario_evaluaciones.sql
+  003_gestion_cuentas.sql
 src/
   config/
     database.js
@@ -53,6 +55,7 @@ src/
     authController.js
     claseController.js
     consignaController.js
+    cuentaController.js
     evaluacionController.js
     profesorController.js
   middlewares/
@@ -66,11 +69,13 @@ src/
     authRoutes.js
     claseRoutes.js
     consignaRoutes.js
+    cuentaRoutes.js
     evaluacionRoutes.js
     profesorRoutes.js
   schemas/
     authSchemas.js
     claseSchemas.js
+    cuentaSchemas.js
   services/
     ollamaGradingService.js
   app.js
@@ -135,17 +140,111 @@ CREATE TABLE correccion_codigo (
 ) ENGINE=InnoDB;
 </file>
 
+<file path="migrations/002_horario_evaluaciones.sql">
+ALTER TABLE evaluacion
+    ADD COLUMN hora TIME NULL AFTER fecha,
+    ADD COLUMN duracion SMALLINT UNSIGNED NULL AFTER hora;
+</file>
+
+<file path="migrations/003_gestion_cuentas.sql">
+ALTER TABLE login
+    ADD COLUMN estado ENUM('activo', 'suspendido', 'eliminado')
+        NOT NULL DEFAULT 'activo' AFTER rol;
+
+CREATE TABLE solicitud_alta_alumno (
+    id_solicitud BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    alumno_cedula_alumno INT NOT NULL,
+    usuario VARCHAR(50) NOT NULL,
+    password_hash VARCHAR(255) NULL,
+    token_consulta_hash CHAR(64) NOT NULL,
+    estado ENUM('pendiente', 'aprobada', 'rechazada')
+        NOT NULL DEFAULT 'pendiente',
+    motivo_rechazo TEXT NULL,
+    resuelta_por_login_id INT NULL,
+    resuelta_por_usuario VARCHAR(50) NULL,
+    resuelta_por_rol ENUM('admin', 'profesor') NULL,
+    fecha_solicitud TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    fecha_resolucion TIMESTAMP NULL,
+    alumno_pendiente INT GENERATED ALWAYS AS (
+        CASE WHEN estado = 'pendiente' THEN alumno_cedula_alumno ELSE NULL END
+    ) STORED,
+    usuario_pendiente VARCHAR(50) GENERATED ALWAYS AS (
+        CASE WHEN estado = 'pendiente' THEN usuario ELSE NULL END
+    ) STORED,
+    PRIMARY KEY (id_solicitud),
+    UNIQUE KEY uq_solicitud_alta_token (token_consulta_hash),
+    UNIQUE KEY uq_solicitud_alta_alumno_pendiente (alumno_pendiente),
+    UNIQUE KEY uq_solicitud_alta_usuario_pendiente (usuario_pendiente),
+    KEY ix_solicitud_alta_estado_fecha (estado, fecha_solicitud),
+    CONSTRAINT fk_solicitud_alta_alumno
+        FOREIGN KEY (alumno_cedula_alumno)
+        REFERENCES alumno (cedula_alumno),
+    CONSTRAINT fk_solicitud_alta_revisor
+        FOREIGN KEY (resuelta_por_login_id)
+        REFERENCES login (id_login)
+        ON DELETE SET NULL
+) ENGINE=InnoDB;
+
+CREATE TABLE solicitud_gestion_cuenta (
+    id_solicitud BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    cuenta_objetivo_id INT NOT NULL,
+    cuenta_solicitante_id INT NOT NULL,
+    solicitante_usuario VARCHAR(50) NOT NULL,
+    solicitante_rol ENUM('alumno', 'profesor') NOT NULL,
+    accion ENUM('suspender', 'eliminar') NOT NULL,
+    motivo TEXT NOT NULL,
+    estado ENUM('pendiente', 'aprobada', 'rechazada')
+        NOT NULL DEFAULT 'pendiente',
+    motivo_resolucion TEXT NULL,
+    resuelta_por_login_id INT NULL,
+    resuelta_por_usuario VARCHAR(50) NULL,
+    fecha_solicitud TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    fecha_resolucion TIMESTAMP NULL,
+    objetivo_pendiente INT GENERATED ALWAYS AS (
+        CASE WHEN estado = 'pendiente' THEN cuenta_objetivo_id ELSE NULL END
+    ) STORED,
+    PRIMARY KEY (id_solicitud),
+    UNIQUE KEY uq_solicitud_gestion_objetivo_pendiente (objetivo_pendiente),
+    KEY ix_solicitud_gestion_estado_fecha (estado, fecha_solicitud),
+    CONSTRAINT fk_solicitud_gestion_objetivo
+        FOREIGN KEY (cuenta_objetivo_id)
+        REFERENCES login (id_login),
+    CONSTRAINT fk_solicitud_gestion_solicitante
+        FOREIGN KEY (cuenta_solicitante_id)
+        REFERENCES login (id_login),
+    CONSTRAINT fk_solicitud_gestion_revisor
+        FOREIGN KEY (resuelta_por_login_id)
+        REFERENCES login (id_login)
+        ON DELETE SET NULL
+) ENGINE=InnoDB;
+
+CREATE TABLE auditoria_cuenta (
+    id_evento BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    tipo_solicitud ENUM('alta_alumno', 'gestion_cuenta', 'administracion') NOT NULL,
+    solicitud_id BIGINT UNSIGNED NULL,
+    accion VARCHAR(40) NOT NULL,
+    cuenta_objetivo_id INT NULL,
+    alumno_cedula INT NULL,
+    actor_login_id INT NULL,
+    actor_usuario VARCHAR(50) NOT NULL,
+    actor_rol VARCHAR(20) NOT NULL,
+    motivo TEXT NULL,
+    fecha_evento TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id_evento),
+    KEY ix_auditoria_cuenta_solicitud (tipo_solicitud, solicitud_id, fecha_evento),
+    KEY ix_auditoria_cuenta_objetivo (cuenta_objetivo_id, fecha_evento),
+    KEY ix_auditoria_cuenta_actor (actor_login_id, fecha_evento)
+) ENGINE=InnoDB;
+</file>
+
 <file path="src/config/database.js">
 import mysql from "mysql2/promise"
 import dotenv from "dotenv"
 import fs from "node:fs"
+import { fileURLToPath } from "node:url"
 
-dotenv.config()
-
-console.log("DB_HOST:", process.env.DB_HOST)
-console.log("DB_PORT:", process.env.DB_PORT)
-console.log("DB_USER:", process.env.DB_USER)
-console.log("DB_NAME:", process.env.DB_NAME)
+// Mantiene la configuración anclada al backend y evita depender del cwd.
+dotenv.config({ path: fileURLToPath(new URL("../../.env", import.meta.url)) })
 
 /**
  * Pool de conexiones MYSQL
@@ -155,7 +254,7 @@ console.log("DB_NAME:", process.env.DB_NAME)
 
 const pool = mysql.createPool({
     host: process.env.DB_HOST,
-    port: Number(process.env.DB_PORT),
+    port: Number(process.env.DB_PORT || 3306),
     user: process.env.DB_USER,
     password: process.env.DB_PASS,
     database: process.env.DB_NAME,
@@ -484,6 +583,57 @@ const obtenerAlumno = async (req, res) => {
 const eliminarArchivo = async (ruta) => {
     if (ruta) await fs.unlink(ruta).catch(() => {})
 }
+
+const verificarTiempoEvaluacion = async (cedulaAlumno, idEvaluacion) => {
+    const [filas] = await pool.query(
+        `
+        SELECT
+            ae.estado,
+            ae.fecha_inicio,
+            ae.fecha_finalizacion,
+            e.duracion,
+            TIMESTAMPDIFF(
+                SECOND,
+                NOW(),
+                DATE_ADD(ae.fecha_inicio, INTERVAL e.duracion MINUTE)
+            ) AS segundos_restantes
+        FROM alumno_evaluacion ae
+        INNER JOIN evaluacion e
+            ON e.id_evaluacion = ae.evaluacion_id_evaluacion
+        WHERE ae.alumno_cedula_alumno = ?
+        AND ae.evaluacion_id_evaluacion = ?
+        `,
+        [cedulaAlumno, idEvaluacion]
+    )
+
+    if (filas.length === 0) return null
+
+    const evaluacion = filas[0]
+
+    if (
+        evaluacion.estado === "en_progreso" &&
+        evaluacion.duracion !== null &&
+        Number(evaluacion.segundos_restantes) <= 0
+    ) {
+        await pool.query(
+            `
+            UPDATE alumno_evaluacion
+            SET
+                estado = 'finalizada',
+                fecha_finalizacion = NOW()
+            WHERE alumno_cedula_alumno = ?
+            AND evaluacion_id_evaluacion = ?
+            AND estado = 'en_progreso'
+            `,
+            [cedulaAlumno, idEvaluacion]
+        )
+
+        evaluacion.estado = "finalizada"
+        evaluacion.segundos_restantes = 0
+    }
+
+    return evaluacion
+}
 const obtenerMiPerfil = async (req, res) => {
     try {
         const [usuarios] = await pool.query(`
@@ -550,7 +700,8 @@ const iniciarEvaluacion = async (req, res) => {
                 e.descripcion,
                 e.fecha,
                 e.tipo,
-                e.cantidad_preguntas
+                e.cantidad_preguntas,
+                e.duracion
             FROM evaluacion e
             INNER JOIN clase_alumno ca
                 ON ca.id_clase = e.id_clase
@@ -579,8 +730,39 @@ const iniciarEvaluacion = async (req, res) => {
             [alumno.cedula_alumno, id]
         )
 
-        if (asignacionesExistentes.length > 0) {
-            const [preguntasAsignadas] = await pool.query(
+    if (asignacionesExistentes.length > 0) {
+        
+        const tiempoEvaluacion = await verificarTiempoEvaluacion(
+        alumno.cedula_alumno,
+        id
+    )
+
+    if (!tiempoEvaluacion || tiempoEvaluacion.estado === "finalizada") {
+        return res.status(400).json({
+            mensaje: "La evaluación ya fue finalizada o se agotó el tiempo",
+            estado: "finalizada"
+        })
+}
+            const [evaluacionAlumno] = await pool.query(
+    `
+    SELECT estado
+    FROM alumno_evaluacion
+    WHERE alumno_cedula_alumno = ?
+    AND evaluacion_id_evaluacion = ?
+    `,
+    [alumno.cedula_alumno, id]
+)
+
+if (
+    evaluacionAlumno.length > 0 &&
+    evaluacionAlumno[0].estado === "finalizada"
+) {
+    return res.status(400).json({
+        mensaje: "La evaluación ya fue finalizada",
+        estado: "finalizada"
+    })
+    
+}const [preguntasAsignadas] = await pool.query(
                 `
                 SELECT
                     ac.id_asignacion,
@@ -598,10 +780,15 @@ const iniciarEvaluacion = async (req, res) => {
             )
 
             return res.status(200).json({
-                mensaje: "La evaluación ya fue iniciada",
-                preguntas_asignadas: preguntasAsignadas
-            })
-        }
+    mensaje: "La evaluación ya fue iniciada",
+    preguntas_asignadas: preguntasAsignadas,
+    duracion: tiempoEvaluacion.duracion,
+    segundos_restantes: Math.max(
+        0,
+        Number(tiempoEvaluacion.segundos_restantes)
+    )
+})
+}
 
         const cantidadSolicitada = Number(evaluacion.cantidad_preguntas)
 
@@ -758,8 +945,16 @@ const guardarRespuesta = async (req, res) => {
             })
         }
 
-        if (evaluacionesAlumno[0].estado === "finalizada") {
-            return res.status(400).json({ mensaje: "La evaluación ya fue finalizada" })
+        const tiempoEvaluacion = await verificarTiempoEvaluacion(
+    alumno.cedula_alumno,
+    asignacion.evaluacion_id_evaluacion
+)
+
+        if (!tiempoEvaluacion || tiempoEvaluacion.estado === "finalizada") {
+            return res.status(400).json({
+                mensaje: "La evaluación ya fue finalizada o se agotó el tiempo",
+                estado: "finalizada"
+            })
         }
         const [respuestasExistentes] = await pool.query(`
             SELECT id_respuesta
@@ -804,6 +999,15 @@ const obtenerProgresoEvaluacion = async (req, res) => {
         const { id } = req.params
         const alumno = await obtenerAlumno(req, res)
         if (!alumno) return
+        const tiempoEvaluacion = await verificarTiempoEvaluacion(
+                alumno.cedula_alumno,
+                id)
+
+            if (!tiempoEvaluacion) {
+                return res.status(404).json({
+                    mensaje: "El alumno no tiene esta evaluación iniciada"
+                })
+            }
         const [progreso] = await pool.query(`
             SELECT ac.id_asignacion, ac.consigna_id_consigna, ac.estado, c.consigna
             FROM alumno_consigna ac
@@ -824,6 +1028,12 @@ const obtenerProgresoEvaluacion = async (req, res) => {
 
         return res.status(200).json({
             evaluacion_id: Number(id),
+            estado: tiempoEvaluacion.estado,
+            duracion: tiempoEvaluacion.duracion,
+            segundos_restantes: Math.max(
+                0,
+                Number(tiempoEvaluacion.segundos_restantes)
+            ),
             total_preguntas: progreso.length,
             respondidas,
             pendientes: progreso.length - respondidas,
@@ -927,44 +1137,49 @@ const subirArchivo = async (req, res) => {
 
         const asignacion = asignaciones[0];
 
-        const [evaluacionesAlumno] = await pool.query(`
-            SELECT estado
-            FROM alumno_evaluacion
-            WHERE
-                alumno_cedula_alumno = ?
-                AND evaluacion_id_evaluacion = ?
-        `, [
+        const tiempoEvaluacion = await verificarTiempoEvaluacion(
             alumno.cedula_alumno,
             asignacion.evaluacion_id_evaluacion
-        ]);
+        );
 
-        if (evaluacionesAlumno.length === 0) {
-            return res.status(404).json({
-                mensaje: "No se encontró el registro de la evaluación"
-            });
-        }
-
-        if (evaluacionesAlumno[0].estado === "finalizada") {
+        if (!tiempoEvaluacion || tiempoEvaluacion.estado === "finalizada") {
             return res.status(400).json({
-                mensaje: "La evaluación ya fue finalizada"
+                mensaje: "La evaluación ya fue finalizada o se agotó el tiempo",
+                estado: "finalizada"
             });
         }
 
-        const [resultado] = await pool.query(`
-            INSERT INTO entrega_codigo (
-                nombre_archivo,
-                ruta_archivo,
-                fecha_entrega,
-                alumno_consigna_id_asignacion
-            )
-            VALUES (?, ?, CURDATE(), ?)
-        `, [
-            req.file.originalname,
-            req.file.path,
-            asignacion.id_asignacion
-        ]);
+        const conexion = await pool.getConnection()
+        let resultado
+        try {
+            await conexion.beginTransaction()
+            const [insertado] = await conexion.query(`
+                INSERT INTO entrega_codigo (
+                    nombre_archivo,
+                    ruta_archivo,
+                    fecha_entrega,
+                    alumno_consigna_id_asignacion
+                )
+                VALUES (?, ?, CURDATE(), ?)
+            `, [req.file.originalname, req.file.path, asignacion.id_asignacion])
+            resultado = insertado
 
-        archivoRegistrado = true;
+            // La respuesta y su archivo deben persistir juntos para permitir finalizar.
+            await conexion.query(`
+                UPDATE alumno_consigna
+                SET estado = 'respondida'
+                WHERE id_asignacion = ?
+                  AND alumno_cedula_alumno = ?
+                  AND estado = 'pendiente'
+            `, [asignacion.id_asignacion, alumno.cedula_alumno])
+            await conexion.commit()
+            archivoRegistrado = true
+        } catch (error) {
+            await conexion.rollback().catch(() => {})
+            throw error
+        } finally {
+            conexion.release()
+        }
 
         const correccion = await corregirEntregaCodigo({
             idEntrega: resultado.insertId,
@@ -1089,6 +1304,41 @@ const obtenerResultadoEvaluacion = async (req, res) => {
         return res.status(500).json({ mensaje: "Error interno del servidor" })
     }
 }
+
+const obtenerMisClasesAlumno = async (req, res) => {
+    try {
+        const [clases] = await pool.query(
+            `
+            SELECT
+                c.id_clase,
+                c.nombre,
+                c.periodo_lectivo,
+                ca.estado,
+                ca.fecha_inscripcion
+            FROM login l
+            INNER JOIN alumno a
+                ON a.cedula_alumno = l.alumno_cedula_alumno
+            INNER JOIN clase_alumno ca
+                ON ca.alumno_cedula_alumno = a.cedula_alumno
+            INNER JOIN clase c
+                ON c.id_clase = ca.id_clase
+            WHERE l.id_login = ?
+            AND l.rol = 'alumno'
+            ORDER BY ca.fecha_inscripcion DESC
+            `,
+            [req.user.id]
+        )
+
+        return res.status(200).json({ clases })
+
+    } catch (error) {
+        console.error(error)
+        return res.status(500).json({
+            mensaje: "Error al obtener las clases del alumno"
+        })
+    }
+}
+
 export {
     obtenerMiPerfil,
     obtenerEvaluaciones,
@@ -1097,7 +1347,9 @@ export {
     obtenerProgresoEvaluacion,
     finalizarEvaluacion,
     subirArchivo,
-    obtenerResultadoEvaluacion
+    obtenerResultadoEvaluacion,
+    obtenerMisClasesAlumno,
+
 }
 </file>
 
@@ -1105,6 +1357,10 @@ export {
 import { pool } from "../config/database.js"
 import bcrypt from "bcryptjs"
 import jwt from "jsonwebtoken"
+import { createHash, randomBytes } from "node:crypto"
+
+const hashConsulta = (token) =>
+    createHash("sha256").update(token).digest("hex")
 
 /**
  * Crear un registro nuevo de usuario
@@ -1114,85 +1370,159 @@ import jwt from "jsonwebtoken"
  */
 
 const crearUsuario = async (req, res) => {
+    let conexion
+
     try {
-        // Recibo los datos ingresados
-        const {usuario, password, rol, cedula} = req.body;
+        const { usuario, password, cedula } = req.body
 
-        // Verifico si la cedula pertenece a un alumno existente
-        const [rolAlumno] = await pool.query(
-            `
-            SELECT cedula_alumno
-            FROM alumno
-            WHERE cedula_alumno = ?
-            `,
+        // La transaccion mantiene juntas la solicitud y su evento de auditoria
+        conexion = await pool.getConnection()
+        await conexion.beginTransaction()
+
+        // Bloquea el perfil mientras comprobamos si ya tiene una cuenta o solicitud
+        const [alumnos] = await conexion.query(
+            `SELECT cedula_alumno
+             FROM alumno
+             WHERE cedula_alumno = ?
+             FOR UPDATE`,
             [cedula]
         )
 
-        if (rolAlumno.length === 0) {
+        if (alumnos.length === 0) {
+            await conexion.rollback()
             return res.status(400).json({
-                mensaje: "No existe un alumno con esa cédula"
-            });
+                mensaje: "No existe un alumno con esa cedula"
+            })
         }
 
-        // Verifico que no exista otra cuenta vinculada a un alumno
-        const [cuentaAlumno] = await pool.query(
-            `
-            SELECT alumno_cedula_alumno
-            FROM login
-            WHERE alumno_cedula_alumno = ?
-            `,
-            [cedula]
+        const [cuentas] = await conexion.query(
+            `SELECT id_login
+             FROM login
+             WHERE alumno_cedula_alumno = ? OR usuario = ?`,
+            [cedula, usuario]
         )
 
-        if (cuentaAlumno.length > 0) {
+        if (cuentas.length > 0) {
+            await conexion.rollback()
             return res.status(409).json({
-                mensaje: "Este alumnno ya tiene una cuenta"
-            });
+                mensaje: "La cedula o el usuario ya estan asociados a una cuenta"
+            })
         }
 
-        // Verifico que no exista el usuario
-        const [usuarios] = await pool.query(
-            `
-            SELECT *
-            FROM login
-            WHERE usuario = ?
-            `,
-            [usuario]
+        const [solicitudesPendientes] = await conexion.query(
+            `SELECT id_solicitud
+             FROM solicitud_alta_alumno
+             WHERE estado = 'pendiente'
+               AND (alumno_cedula_alumno = ? OR usuario = ?)
+             FOR UPDATE`,
+            [cedula, usuario]
         )
 
-        if (usuarios.length > 0) {
+        if (solicitudesPendientes.length > 0) {
+            await conexion.rollback()
             return res.status(409).json({
-                mensaje: "El usuario ya está registrado"
-            });
+                mensaje: "Ya existe una solicitud pendiente para esos datos"
+            })
         }
 
-        // Convierto la contraseña enviada a un codigo hash
+        // Solo codificamos cuando sabemos que se creara la solicitud
         const passwordHash = await bcrypt.hash(password, 10)
+        const tokenConsulta = randomBytes(32).toString("base64url")
+        const tokenConsultaHash = hashConsulta(tokenConsulta)
 
-        // Inserto los datos en la tabla login
-        await pool.query(
-            `
-            INSERT INTO login (
+        const [resultado] = await conexion.query(
+            `INSERT INTO solicitud_alta_alumno (
+                alumno_cedula_alumno,
                 usuario,
                 password_hash,
-                rol,
-                alumno_cedula_alumno
-            )
-            VALUES (?, ?, ?, ?)
-            `,
-            [usuario, passwordHash, rol, cedula]
+                token_consulta_hash
+             )
+             VALUES (?, ?, ?, ?)`,
+            [cedula, usuario, passwordHash, tokenConsultaHash]
         )
 
-        return res.status(201).json({
-            mensaje: "Usuario creado correctamente"
-        });
+        await conexion.query(
+            `INSERT INTO auditoria_cuenta (
+                tipo_solicitud,
+                solicitud_id,
+                accion,
+                alumno_cedula,
+                actor_usuario,
+                actor_rol
+             )
+             VALUES ('alta_alumno', ?, 'solicitud_enviada', ?, ?, 'alumno_solicitante')`,
+            [resultado.insertId, cedula, `cedula:${cedula}`]
+        )
+
+        await conexion.commit()
+
+        return res.status(202).json({
+            mensaje: "Solicitud enviada. Un docente o administrador debe revisarla.",
+            solicitud: {
+                id: resultado.insertId,
+                estado: "pendiente",
+                token_consulta: tokenConsulta
+            }
+        })
 
     } catch (error) {
+
+        if (conexion) {
+            await conexion.rollback().catch(() => {})
+        }
+
+        if (error.code === "ER_DUP_ENTRY") {
+            return res.status(409).json({
+                mensaje: "Ya existe una solicitud pendiente para esos datos"
+            })
+        }
+
         console.error(error);
 
         return res.status(500).json({
             mensaje: "Error interno del servidor"
-        });
+        })
+
+    } finally {
+        if (conexion) {
+            conexion.release()
+        }
+    }
+}
+
+const consultarSolicitudAlumno = async (req, res) => {
+    try {
+        const { id, token } = req.body
+
+        const [solicitudes] = await pool.query(
+            `
+            SELECT
+                estado,
+                motivo_rechazo,
+                fecha_solicitud,
+                fecha_resolucion
+            FROM solicitud_alta_alumno
+            WHERE id_solicitud = ?
+              AND token_consulta_hash = ?
+            `,
+            [id, hashConsulta(token)]
+        )
+
+        if (solicitudes.length === 0) {
+            return res.status(404).json({
+                mensaje: "Solicitud no encontrada"
+            })
+        }
+
+        return res.status(200).json({
+            solicitud: solicitudes[0]
+        })
+    } catch (error) {
+        console.error(error)
+
+        return res.status(500).json({
+            mensaje: "Error interno del servidor"
+        })
     }
 }
 
@@ -1333,11 +1663,25 @@ const login = async (req, res) => {
             });
         }
 
+        if (usuarioEncontrado.estado !== "activo") {
+            return res.status(403).json({
+                mensaje: usuarioEncontrado.estado === "suspendido"
+                    ? "La cuenta está suspendida"
+                    : "La cuenta está eliminada"
+            })
+        }
+
+        // Roles se emiten normalizados para mantener un contrato estable con Vue y los guards.
+        const rol = String(usuarioEncontrado.rol || "").trim().toLowerCase()
+        if (!["alumno", "profesor", "admin"].includes(rol)) {
+            return res.status(403).json({ mensaje: "El rol de la cuenta no es válido" })
+        }
+
         const token = jwt.sign(
             {
                 id: usuarioEncontrado.id_login,
                 usuario: usuarioEncontrado.usuario,
-                rol: usuarioEncontrado.rol
+                rol
             },
             process.env.JWT_SECRET,
             {
@@ -1362,7 +1706,8 @@ const login = async (req, res) => {
 export {
     crearUsuario,
     crearCuentaProfesor,
-    login
+    login,
+    consultarSolicitudAlumno
 }
 </file>
 
@@ -1882,6 +2227,782 @@ export {
 }
 </file>
 
+<file path="src/controllers/cuentaController.js">
+import { pool } from "../config/database.js"
+
+const obtenerSolicitudesAltaAlumno = async (req, res) => {
+    try {
+        const estado = req.query.estado || "pendiente"
+        const estadosValidos = ["pendiente", "aprobada", "rechazada", "todas"]
+
+        if (!estadosValidos.includes(estado)) {
+            return res.status(400).json({
+                mensaje: "El estado solicitado no es valido"
+            })
+        }
+
+        // Los docentes solo revisan solicitudes pendientes
+        if (req.user.rol === "profesor" && estado !== "pendiente") {
+            return res.status(403).json({
+                mensaje: "Los docentes solo pueden consultar solicitudes pendientes"
+            })
+        }
+
+        // Si buscamos todos los estados no añadimos ningun filtro, caso contrario agregamos
+        const filtroEstado = estado === "todas"
+            ? ""
+            : "AND s.estado = ?"
+
+        // Preparamos los parametros para enviarlos a MySQL
+        const parametros = estado === "todas" ? [] : [estado]
+
+        const [solicitudes] = await pool.query(
+            `
+            SELECT
+                s.id_solicitud,
+                s.alumno_cedula_alumno,
+                s.usuario,
+                s.estado,
+                s.motivo_rechazo,
+                s.fecha_solicitud,
+                s.fecha_resolucion,
+                s.resuelta_por_usuario,
+                s.resuelta_por_rol,
+                a.nombre,
+                a.apellido,
+                a.correo
+            FROM solicitud_alta_alumno s
+            INNER JOIN alumno a
+                ON a.cedula_alumno = s.alumno_cedula_alumno
+            WHERE 1 = 1 ${filtroEstado}
+            ORDER BY s.fecha_solicitud ASC
+            `,
+            parametros
+        )
+
+        return res.status(200).json({ solicitudes })
+
+    } catch (error) {
+        console.error(error)
+
+        return res.status(500).json({
+            mensaje: "Error interno del servidor"
+        })
+    }
+}
+
+const resolverSolicitudAltaAlumno = async (req, res) => {
+    let conexion
+
+    try {
+        const idSolicitud = Number(req.params.id)
+        const { decision, motivo } = req.body
+
+        conexion = await pool.getConnection()
+        await conexion.beginTransaction()
+
+        // El bloqueo evita que dos revisores resuelvan la misma solicitud a la vez
+        const [solicitudes] = await conexion.query(
+            `
+            SELECT
+                id_solicitud,
+                alumno_cedula_alumno,
+                usuario,
+                password_hash,
+                estado
+            FROM solicitud_alta_alumno
+            WHERE id_solicitud = ?
+            FOR UPDATE
+            `,
+            [idSolicitud]
+        )
+
+        if (solicitudes.length === 0) {
+            await conexion.rollback()
+            return res.status(404).json({
+                mensaje: "Solicitud no encontrada"
+            })
+        }
+
+        const solicitud = solicitudes[0]
+
+        if (solicitud.estado !== "pendiente") {
+            await conexion.rollback()
+            return res.status(409).json({
+                mensaje: "La solicitud ya fue resuelta"
+            })
+        }
+
+        let cuentaCreadaId = null
+
+        // Verifico si la decision es "aprobar"
+        if (decision === "aprobar") {
+            const [cuentasExistentes] = await conexion.query(
+                `
+                SELECT id_login
+                FROM login
+                WHERE alumno_cedula_alumno = ? OR usuario = ?
+                FOR UPDATE
+                `,
+                [solicitud.alumno_cedula_alumno, solicitud.usuario]
+            )
+
+            if (cuentasExistentes.length > 0) {
+                await conexion.rollback()
+                return res.status(409).json({
+                    mensaje: "La cédula o el usuario ya están asociados a una cuenta"
+                })
+            }
+
+            const [cuenta] = await conexion.query(
+                `
+                INSERT INTO login (
+                    usuario,
+                    password_hash,
+                    rol,
+                    alumno_cedula_alumno,
+                    estado
+                )
+                VALUES (?, ?, 'alumno', ?, 'activo')
+                `,
+                [
+                    solicitud.usuario,
+                    solicitud.password_hash,
+                    solicitud.alumno_cedula_alumno
+                ]
+            )
+
+            cuentaCreadaId = cuenta.insertId
+        }
+
+        const estadoNuevo = decision === "aprobar"
+            ? "aprobada"
+            : "rechazada"
+
+        const motivoRechazo = decision === "rechazar"
+            ? motivo.trim()
+            : null
+
+        // Al resolver, se borra el hash de contraseña de la solicitud
+        await conexion.query(
+            `
+            UPDATE solicitud_alta_alumno
+            SET
+                estado = ?,
+                motivo_rechazo = ?,
+                password_hash = NULL,
+                resuelta_por_login_id = ?,
+                resuelta_por_usuario = ?,
+                resuelta_por_rol = ?,
+                fecha_resolucion = CURRENT_TIMESTAMP
+            WHERE id_solicitud = ?
+            `,
+            [
+                estadoNuevo,
+                motivoRechazo,
+                req.user.id,
+                req.user.usuario,
+                req.user.rol,
+                idSolicitud
+            ]
+        )
+
+        // Registra quien tomo la decision y cual fue
+        await conexion.query(
+            `
+            INSERT INTO auditoria_cuenta (
+                tipo_solicitud,
+                solicitud_id,
+                accion,
+                cuenta_objetivo_id,
+                alumno_cedula,
+                actor_login_id,
+                actor_usuario,
+                actor_rol,
+                motivo
+            )
+            VALUES ('alta_alumno', ?, ?, ?, ?, ?, ?, ?, ?)
+            `,
+            [
+                idSolicitud,
+                decision === "aprobar"
+                    ? "solicitud_aprobada"
+                    : "solicitud_rechazada",
+                cuentaCreadaId,
+                solicitud.alumno_cedula_alumno,
+                req.user.id,
+                req.user.usuario,
+                req.user.rol,
+                motivoRechazo
+            ]
+        )
+
+        await conexion.commit()
+
+        return res.status(200).json({
+            mensaje: decision === "aprobar"
+                ? "Solicitud aprobada"
+                : "Solicitud rechazada",
+            estado: estadoNuevo,
+            cuenta_id: cuentaCreadaId
+        })
+    } catch (error) {
+        
+        if (conexion) {
+            await conexion.rollback().catch(() => {})
+        }
+
+        if (error.code === "ER_DUP_ENTRY") {
+            return res.status(409).json({
+                mensaje: "La cédula o el usuario ya están registrados"
+            })
+        }
+
+        console.error(error)
+
+        return res.status(500).json({
+            mensaje: "Error interno del servidor"
+        })
+
+    } finally {
+        if (conexion) {
+            conexion.release()
+        }
+    }
+}
+
+const obtenerCuentas = async (req, res) => {
+    try {
+        const [cuentas] = await pool.query(`
+            SELECT
+                l.id_login,
+                l.usuario,
+                l.rol,
+                l.estado,
+                COALESCE(a.cedula_alumno, p.cedula_profesor) AS cedula,
+                COALESCE(a.nombre, p.nombre) AS nombre,
+                COALESCE(a.apellido, p.apellido) AS apellido,
+                COALESCE(a.correo, p.correo) AS correo
+            FROM login l
+            LEFT JOIN alumno a
+                ON a.cedula_alumno = l.alumno_cedula_alumno
+            LEFT JOIN profesor p
+                ON p.cedula_profesor = l.profesor_cedula_profesor
+            ORDER BY l.rol, l.usuario
+        `)
+
+        return res.status(200).json({ cuentas })
+
+    } catch (error) {
+        console.error(error)
+
+        return res.status(500).json({
+            mensaje: "Error interno del servidor"
+        })
+    }
+}
+
+const cambiarEstadoCuenta = async (req, res) => {
+    let conexion
+
+    try {
+        const idCuenta = Number(req.params.id)
+        const { estado, motivo } = req.body
+
+        // Evita que el administrador que esta usando la sesion se bloquee a si mismo
+        if (idCuenta === Number(req.user.id) && estado !== "activo") {
+            return res.status(400).json({
+                mensaje: "No podés suspender ni eliminar tu propia cuenta"
+            })
+        }
+
+        conexion = await pool.getConnection()
+        await conexion.beginTransaction()
+
+        const [cuentas] = await conexion.query(
+            `SELECT id_login, estado
+             FROM login
+             WHERE id_login = ?
+             FOR UPDATE`,
+            [idCuenta]
+        )
+
+        if (cuentas.length === 0) {
+            await conexion.rollback()
+            return res.status(404).json({
+                mensaje: "Cuenta no encontrada"
+            })
+        }
+
+        const estadoActual = cuentas[0].estado
+
+        if (estadoActual === "eliminado" && estado !== "eliminado") {
+            await conexion.rollback()
+            return res.status(409).json({
+                mensaje: "Una cuenta eliminada no se puede reactivar"
+            })
+        }
+
+        if (estadoActual === estado) {
+            await conexion.rollback()
+            return res.status(409).json({
+                mensaje: "La cuenta ya tiene ese estado"
+            })
+        }
+
+        await conexion.query(
+            `UPDATE login
+             SET estado = ?
+             WHERE id_login = ?`,
+            [estado, idCuenta]
+        )
+
+        await conexion.query(
+            `INSERT INTO auditoria_cuenta (
+                tipo_solicitud,
+                accion,
+                cuenta_objetivo_id,
+                actor_login_id,
+                actor_usuario,
+                actor_rol,
+                motivo
+             )
+             VALUES ('administracion', ?, ?, ?, ?, ?, ?)`,
+            [
+                estado === "activo" ? "cuenta_reactivada" : `cuenta_${estado}`,
+                idCuenta,
+                req.user.id,
+                req.user.usuario,
+                req.user.rol,
+                motivo || null
+            ]
+        )
+
+        await conexion.commit()
+
+        return res.status(200).json({
+            mensaje: "Estado de cuenta actualizado",
+            estado
+        })
+    } catch (error) {
+        if (conexion) {
+            await conexion.rollback().catch(() => {})
+        }
+
+        console.error(error)
+
+        return res.status(500).json({
+            mensaje: "Error interno del servidor"
+        })
+
+    } finally {
+        if (conexion) {
+            conexion.release()
+        }
+    }
+}
+
+const solicitarGestionCuenta = async (req, res) => {
+    let conexion
+
+    try {
+        const idObjetivo = Number(req.params.id)
+        const { accion, motivo } = req.body
+
+        conexion = await pool.getConnection()
+        await conexion.beginTransaction()
+
+        const [cuentas] = await conexion.query(
+            `
+            SELECT id_login, rol, estado, alumno_cedula_alumno
+            FROM login
+            WHERE id_login = ?
+            FOR UPDATE
+            `,
+            [idObjetivo]
+        )
+
+        if (cuentas.length === 0) {
+            await conexion.rollback()
+            return res.status(404).json({
+                mensaje: "Cuenta no encontrada"
+            })
+        }
+
+        const cuentaObjetivo = cuentas[0]
+
+        if (cuentaObjetivo.rol !== "alumno") {
+            await conexion.rollback()
+            return res.status(403).json({
+                mensaje: "Solo se pueden solicitar acciones sobre cuentas de alumnos"
+            })
+        }
+
+        if (cuentaObjetivo.estado !== "activo") {
+            await conexion.rollback()
+            return res.status(409).json({
+                mensaje: "La cuenta ya no está activa"
+            })
+        }
+
+        if (
+            req.user.rol === "alumno" &&
+            (
+                idObjetivo !== Number(req.user.id) ||
+                accion !== "eliminar"
+            )
+        ) {
+            await conexion.rollback()
+            return res.status(403).json({
+                mensaje: "El alumno solo puede solicitar la eliminación de su propia cuenta"
+            })
+        }
+
+        const [solicitudesExistentes] = await conexion.query(
+            `
+            SELECT id_solicitud
+            FROM solicitud_gestion_cuenta
+            WHERE cuenta_objetivo_id = ?
+              AND estado = 'pendiente'
+            FOR UPDATE
+            `,
+            [idObjetivo]
+        )
+
+        if (solicitudesExistentes.length > 0) {
+            await conexion.rollback()
+            return res.status(409).json({
+                mensaje: "Ya existe una solicitud pendiente para esta cuenta"
+            })
+        }
+
+        const [resultado] = await conexion.query(
+            `
+            INSERT INTO solicitud_gestion_cuenta (
+                cuenta_objetivo_id,
+                cuenta_solicitante_id,
+                solicitante_usuario,
+                solicitante_rol,
+                accion,
+                motivo
+            )
+            VALUES (?, ?, ?, ?, ?, ?)
+            `,
+            [
+                idObjetivo,
+                req.user.id,
+                req.user.usuario,
+                req.user.rol,
+                accion,
+                motivo
+            ]
+        )
+
+        await conexion.query(
+            `
+            INSERT INTO auditoria_cuenta (
+                tipo_solicitud,
+                solicitud_id,
+                accion,
+                cuenta_objetivo_id,
+                alumno_cedula,
+                actor_login_id,
+                actor_usuario,
+                actor_rol,
+                motivo
+            )
+            VALUES ('gestion_cuenta', ?, ?, ?, ?, ?, ?, ?, ?)
+            `,
+            [
+                resultado.insertId,
+                accion === "eliminar"
+                    ? "eliminacion_solicitada"
+                    : "suspension_solicitada",
+                idObjetivo,
+                cuentaObjetivo.alumno_cedula_alumno,
+                req.user.id,
+                req.user.usuario,
+                req.user.rol,
+                motivo
+            ]
+        )
+
+        await conexion.commit()
+
+        return res.status(201).json({
+            mensaje: "Solicitud enviada al administrador",
+            id_solicitud: resultado.insertId,
+            estado: "pendiente"
+        })
+
+    } catch (error) {
+        if (conexion) {
+            await conexion.rollback().catch(() => {})
+        }
+
+        if (error.code === "ER_DUP_ENTRY") {
+            return res.status(409).json({
+                mensaje: "Ya existe una solicitud pendiente para esta cuenta"
+            })
+        }
+
+        console.error(error)
+
+        return res.status(500).json({
+            mensaje: "Error interno del servidor"
+        })
+
+    } finally {
+        if (conexion) {
+            conexion.release()
+        }
+    }
+}
+
+const obtenerSolicitudesGestion = async (req, res) => {
+    try {
+        const [solicitudes] = await pool.query(`
+            SELECT
+                s.id_solicitud,
+                s.cuenta_objetivo_id,
+                objetivo.usuario AS cuenta_objetivo,
+                s.cuenta_solicitante_id,
+                s.solicitante_usuario,
+                s.solicitante_rol,
+                s.accion,
+                s.motivo,
+                s.fecha_solicitud
+            FROM solicitud_gestion_cuenta s
+            INNER JOIN login objetivo
+                ON objetivo.id_login = s.cuenta_objetivo_id
+            WHERE s.estado = 'pendiente'
+            ORDER BY s.fecha_solicitud ASC
+        `)
+
+        return res.status(200).json({ solicitudes })
+
+    } catch (error) {
+        console.error(error)
+
+        return res.status(500).json({
+            mensaje: "Error interno del servidor"
+        })
+    }
+}
+
+const resolverSolicitudGestion = async (req, res) => {
+    let conexion
+
+    try {
+        const idSolicitud = Number(req.params.id)
+        const { decision, motivo } = req.body
+
+        conexion = await pool.getConnection()
+        await conexion.beginTransaction()
+
+        // Primero leemos el ID objetivo sin bloquear
+        // despues bloqueamos la cuenta y la solicitud en ese orden
+        const [referencias] = await conexion.query(
+            `SELECT cuenta_objetivo_id
+             FROM solicitud_gestion_cuenta
+             WHERE id_solicitud = ?`,
+            [idSolicitud]
+        )
+
+        if (referencias.length === 0) {
+            await conexion.rollback()
+            return res.status(404).json({
+                mensaje: "Solicitud no encontrada"
+            })
+        }
+
+        const idObjetivo = referencias[0].cuenta_objetivo_id
+
+        const [cuentas] = await conexion.query(
+            `SELECT id_login, rol, estado, alumno_cedula_alumno
+             FROM login
+             WHERE id_login = ?
+             FOR UPDATE`,
+            [idObjetivo]
+        )
+
+        const [solicitudes] = await conexion.query(
+            `SELECT id_solicitud, cuenta_objetivo_id, accion, estado
+             FROM solicitud_gestion_cuenta
+             WHERE id_solicitud = ?
+             FOR UPDATE`,
+            [idSolicitud]
+        )
+
+        if (solicitudes.length === 0) {
+            await conexion.rollback()
+            return res.status(404).json({
+                mensaje: "Solicitud no encontrada"
+            })
+        }
+
+        const solicitud = solicitudes[0]
+
+        if (solicitud.estado !== "pendiente") {
+            await conexion.rollback()
+            return res.status(409).json({
+                mensaje: "La solicitud ya fue resuelta"
+            })
+        }
+
+        if (cuentas.length === 0) {
+            await conexion.rollback()
+            return res.status(409).json({
+                mensaje: "La cuenta solicitada ya no existe"
+            })
+        }
+
+        const cuenta = cuentas[0]
+        let estadoCuentaNuevo = null
+
+        if (decision === "aprobar") {
+            if (cuenta.rol !== "alumno" || cuenta.estado !== "activo") {
+                await conexion.rollback()
+                return res.status(409).json({
+                    mensaje: "La cuenta ya no está activa o no es una cuenta de alumno"
+                })
+            }
+
+            estadoCuentaNuevo = solicitud.accion === "suspender"
+                ? "suspendido"
+                : "eliminado"
+
+            await conexion.query(
+                `UPDATE login
+                 SET estado = ?
+                 WHERE id_login = ?`,
+                [estadoCuentaNuevo, cuenta.id_login]
+            )
+        }
+
+        const estadoSolicitud = decision === "aprobar"
+            ? "aprobada"
+            : "rechazada"
+
+        const motivoResolucion = motivo?.trim() || null
+
+        await conexion.query(
+            `UPDATE solicitud_gestion_cuenta
+             SET estado = ?,
+                 motivo_resolucion = ?,
+                 resuelta_por_login_id = ?,
+                 resuelta_por_usuario = ?,
+                 fecha_resolucion = CURRENT_TIMESTAMP
+             WHERE id_solicitud = ?`,
+            [
+                estadoSolicitud,
+                motivoResolucion,
+                req.user.id,
+                req.user.usuario,
+                idSolicitud
+            ]
+        )
+
+        await conexion.query(
+            `INSERT INTO auditoria_cuenta (
+                tipo_solicitud,
+                solicitud_id,
+                accion,
+                cuenta_objetivo_id,
+                alumno_cedula,
+                actor_login_id,
+                actor_usuario,
+                actor_rol,
+                motivo
+             )
+             VALUES ('gestion_cuenta', ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+                idSolicitud,
+                decision === "aprobar"
+                    ? `cuenta_${solicitud.accion}`
+                    : "solicitud_rechazada",
+                cuenta.id_login,
+                cuenta.alumno_cedula_alumno,
+                req.user.id,
+                req.user.usuario,
+                req.user.rol,
+                motivoResolucion
+            ]
+        )
+
+        await conexion.commit()
+
+        return res.status(200).json({
+            mensaje: decision === "aprobar"
+                ? "Solicitud aprobada"
+                : "Solicitud rechazada",
+            estado: estadoSolicitud,
+            estado_cuenta: estadoCuentaNuevo
+        })
+    } catch (error) {
+        if (conexion) {
+            await conexion.rollback().catch(() => {})
+        }
+
+        console.error(error)
+
+        return res.status(500).json({
+            mensaje: "Error interno del servidor"
+        })
+
+    } finally {
+        if (conexion) {
+            conexion.release()
+        }
+    }
+}
+
+const obtenerMisSolicitudesGestion = async (req, res) => {
+    try {
+        const [solicitudes] = await pool.query(
+            `
+            SELECT
+                s.id_solicitud,
+                s.cuenta_objetivo_id,
+                objetivo.usuario AS cuenta_objetivo,
+                s.accion,
+                s.motivo,
+                s.estado,
+                s.motivo_resolucion,
+                s.resuelta_por_usuario,
+                s.fecha_solicitud,
+                s.fecha_resolucion
+            FROM solicitud_gestion_cuenta s
+            INNER JOIN login objetivo
+                ON objetivo.id_login = s.cuenta_objetivo_id
+            WHERE s.cuenta_solicitante_id = ?
+            ORDER BY s.fecha_solicitud DESC
+            `,
+            [req.user.id]
+        )
+
+        return res.status(200).json({ solicitudes })
+    } catch (error) {
+        console.error(error)
+
+        return res.status(500).json({
+            mensaje: "Error interno del servidor"
+        })
+    }
+}
+
+export {
+    obtenerSolicitudesAltaAlumno,
+    resolverSolicitudAltaAlumno,
+    obtenerCuentas,
+    cambiarEstadoCuenta,
+    solicitarGestionCuenta,
+    obtenerSolicitudesGestion,
+    resolverSolicitudGestion,
+    obtenerMisSolicitudesGestion
+}
+</file>
+
 <file path="src/controllers/evaluacionController.js">
 import { pool } from "../config/database.js"
 
@@ -1891,6 +3012,8 @@ const crearEvaluacion = async (req, res) => {
             titulo,
             descripcion,
             fecha,
+            hora,
+            duracion,
             tipo,
             id_clase,
             cantidad_preguntas
@@ -1898,10 +3021,52 @@ const crearEvaluacion = async (req, res) => {
 
         const idClase = Number(id_clase)
         const cantidadPreguntas = Number(cantidad_preguntas)
+        const duracionMinutos = Number(duracion)
 
-        if (!titulo || !descripcion || !fecha || !tipo) {
+        if (
+            !titulo ||
+            !descripcion ||
+            !fecha ||
+            !hora ||
+            !tipo ||
+            duracion === undefined ||
+            duracion === null
+        ) {
             return res.status(400).json({
                 mensaje: "Faltan campos obligatorios"
+            })
+        }
+
+        const fechaParseada = typeof fecha === "string"
+            ? new Date(`${fecha}T00:00:00Z`)
+            : null
+        if (
+            typeof fecha !== "string" ||
+            !/^\d{4}-\d{2}-\d{2}$/.test(fecha) ||
+            !fechaParseada || Number.isNaN(fechaParseada.getTime()) ||
+            fechaParseada.toISOString().slice(0, 10) !== fecha
+        ) {
+            return res.status(400).json({
+                mensaje: "La fecha debe tener el formato YYYY-MM-DD y ser válida"
+            })
+        }
+
+        if (
+            typeof hora !== "string" ||
+            !/^([01]\d|2[0-3]):[0-5]\d$/.test(hora)
+        ) {
+            return res.status(400).json({
+                mensaje: "La hora debe tener el formato HH:mm"
+            })
+        }
+
+        if (
+            !Number.isInteger(duracionMinutos) ||
+            duracionMinutos < 1 ||
+            duracionMinutos > 65535
+        ) {
+            return res.status(400).json({
+                mensaje: "La duración debe ser un entero entre 1 y 65535 minutos"
             })
         }
 
@@ -1945,16 +3110,20 @@ const crearEvaluacion = async (req, res) => {
                 titulo,
                 descripcion,
                 fecha,
+                hora,
+                duracion,
                 tipo,
                 id_clase,
                 cantidad_preguntas
             )
-            VALUES (?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             `,
             [
                 titulo,
                 descripcion,
                 fecha,
+                hora,
+                duracionMinutos,
                 tipo,
                 idClase,
                 cantidadPreguntas
@@ -1973,6 +3142,174 @@ const crearEvaluacion = async (req, res) => {
         return res.status(500).json({
             mensaje: "Error interno del servidor"
         })
+    }
+}
+
+const obtenerEvaluacionesProfesor = async (req, res) => {
+    try {
+        // Parámetros recibidos por la URL
+        const ordenarPor = req.query.ordenarPor || "fecha"
+        const orden = req.query.orden || "desc"
+
+        // Validar el campo por el que se quiere ordenar
+        if (!["fecha", "id"].includes(ordenarPor)) {
+            return res.status(400).json({
+                mensaje: "El campo de orden debe ser 'fecha' o 'id'"
+            })
+        }
+
+        // Validar la dirección del orden
+        if (!["asc", "desc"].includes(orden)) {
+            return res.status(400).json({
+                mensaje: "El orden debe ser 'asc' o 'desc'"
+            })
+        }
+
+        // Seleccionar la columna de forma segura
+        const columnaOrden = ordenarPor === "fecha"
+            ? "e.fecha"
+            : "e.id_evaluacion"
+
+        const ordenSQL = orden.toUpperCase()
+
+        const [evaluaciones] = await pool.query(
+            `
+            SELECT
+                e.id_evaluacion,
+                e.id_clase,
+                e.titulo,
+                e.descripcion,
+                e.fecha,
+                e.hora,
+                e.duracion,
+                e.tipo,
+                e.cantidad_preguntas
+            FROM evaluacion e
+            INNER JOIN clase c
+                ON c.id_clase = e.id_clase
+            INNER JOIN login l
+                ON l.profesor_cedula_profesor = c.profesor_cedula_profesor
+            WHERE l.id_login = ?
+            AND l.rol = 'profesor'
+            ORDER BY ${columnaOrden} ${ordenSQL}, e.id_evaluacion DESC
+            `,
+            [req.user.id]
+        )
+
+        return res.status(200).json({
+            evaluaciones
+        })
+
+    } catch (error) {
+        console.error(error)
+
+        return res.status(500).json({
+            mensaje: "Error interno del servidor"
+        })
+    }
+}
+const eliminarEvaluacion = async (req, res) => {
+    let conexion
+
+    try {
+        const id = Number(req.params.id)
+
+        if (!Number.isInteger(id) || id <= 0) {
+            return res.status(400).json({
+                mensaje: "El ID de la evaluación no es válido"
+            })
+        }
+
+        conexion = await pool.getConnection()
+
+        await conexion.beginTransaction()
+
+        const [evaluaciones] = await conexion.query(
+            `
+            SELECT e.id_evaluacion
+            FROM evaluacion e
+            INNER JOIN clase c
+                ON c.id_clase = e.id_clase
+            INNER JOIN login l
+                ON l.profesor_cedula_profesor = c.profesor_cedula_profesor
+            WHERE e.id_evaluacion = ?
+            AND l.id_login = ?
+            AND l.rol = 'profesor'
+            FOR UPDATE
+            `,
+            [id, req.user.id]
+        )
+
+        if (evaluaciones.length === 0) {
+            await conexion.rollback()
+
+            return res.status(404).json({
+                mensaje: "Evaluación no encontrada"
+            })
+        }
+
+        const [actividad] = await conexion.query(
+            `
+            SELECT evaluacion_id_evaluacion AS id_evaluacion
+            FROM alumno_evaluacion
+            WHERE evaluacion_id_evaluacion = ?
+
+            UNION
+
+            SELECT evaluacion_id_evaluacion AS id_evaluacion
+            FROM alumno_consigna
+            WHERE evaluacion_id_evaluacion = ?
+
+            LIMIT 1
+            `,
+            [id, id]
+        )
+
+        if (actividad.length > 0) {
+            await conexion.rollback()
+
+            return res.status(409).json({
+                mensaje: "No se puede eliminar la evaluación porque ya tiene actividad de alumnos"
+            })
+        }
+
+        await conexion.query(
+            `
+            DELETE FROM evaluacion_consigna
+            WHERE evaluacion_id_evaluacion = ?
+            `,
+            [id]
+        )
+
+        await conexion.query(
+            `
+            DELETE FROM evaluacion
+            WHERE id_evaluacion = ?
+            `,
+            [id]
+        )
+
+        await conexion.commit()
+
+        return res.status(200).json({
+            mensaje: "Evaluación eliminada correctamente"
+        })
+
+    } catch (error) {
+        if (conexion) {
+            await conexion.rollback()
+        }
+
+        console.error(error)
+
+        return res.status(500).json({
+            mensaje: "Error interno del servidor"
+        })
+
+    } finally {
+        if (conexion) {
+            conexion.release()
+        }
     }
 }
 
@@ -2162,11 +3499,155 @@ const eliminarPreguntaDeEvaluacion = async (req, res) => {
     }
 }
 
+const obtenerResultadosProfesor = async (req, res) => {
+    try {
+        const id = Number(req.params.id)
+        if (!Number.isInteger(id) || id <= 0) {
+            return res.status(400).json({ mensaje: "El ID de la evaluación no es válido" })
+        }
+
+        // Primero se confirma propiedad de la evaluación antes de leer datos de alumnos.
+        const [evaluaciones] = await pool.query(`
+            SELECT e.id_evaluacion, e.id_clase, e.titulo
+            FROM evaluacion e
+            INNER JOIN clase c ON c.id_clase = e.id_clase
+            INNER JOIN login l ON l.profesor_cedula_profesor = c.profesor_cedula_profesor
+            WHERE e.id_evaluacion = ? AND l.id_login = ? AND l.rol = 'profesor'
+        `, [id, req.user.id])
+
+        if (evaluaciones.length === 0) {
+            return res.status(404).json({ mensaje: "Evaluación no encontrada" })
+        }
+
+        const evaluacion = evaluaciones[0]
+        const [alumnos] = await pool.query(`
+            SELECT a.cedula_alumno, a.nombre, a.apellido,
+                   ae.estado, ae.fecha_inicio, ae.fecha_finalizacion
+            FROM clase_alumno ca
+            INNER JOIN alumno a ON a.cedula_alumno = ca.alumno_cedula_alumno
+            LEFT JOIN alumno_evaluacion ae
+                ON ae.alumno_cedula_alumno = ca.alumno_cedula_alumno
+               AND ae.evaluacion_id_evaluacion = ?
+            WHERE ca.id_clase = ? AND ca.estado = 'activo'
+            ORDER BY a.apellido, a.nombre
+        `, [id, evaluacion.id_clase])
+
+        const [entregas] = await pool.query(`
+            SELECT ac.alumno_cedula_alumno, ac.id_asignacion, c.consigna,
+                   r.id_respuesta, r.respuesta, r.nota_final,
+                   ec.id_entrega_codigo, ec.nombre_archivo,
+                   cc.estado AS estado_correccion, cc.nota AS nota_ia,
+                   cc.feedback_json
+            FROM alumno_consigna ac
+            INNER JOIN consigna c ON c.id_consigna = ac.consigna_id_consigna
+            LEFT JOIN respuesta r
+                ON r.alumno_consigna_id_asignacion = ac.id_asignacion
+            LEFT JOIN entrega_codigo ec
+                ON ec.alumno_consigna_id_asignacion = ac.id_asignacion
+            LEFT JOIN correccion_codigo cc
+                ON cc.entrega_codigo_id = ec.id_entrega_codigo
+            WHERE ac.evaluacion_id_evaluacion = ?
+            ORDER BY ac.alumno_cedula_alumno, ac.id_asignacion, ec.id_entrega_codigo
+        `, [id])
+
+        const porAlumno = new Map()
+        for (const fila of entregas) {
+            const preguntas = porAlumno.get(fila.alumno_cedula_alumno) || []
+            let pregunta = preguntas.find(item => item.id_asignacion === fila.id_asignacion)
+            if (!pregunta) {
+                pregunta = {
+                    id_asignacion: fila.id_asignacion,
+                    consigna: fila.consigna,
+                    id_respuesta: fila.id_respuesta,
+                    respuesta: fila.respuesta,
+                    nota: fila.nota_final,
+                    entregas_codigo: []
+                }
+                preguntas.push(pregunta)
+            }
+            if (fila.id_entrega_codigo !== null) {
+                pregunta.entregas_codigo.push({
+                    nombre_archivo: fila.nombre_archivo,
+                    estado: fila.estado_correccion,
+                    nota: fila.nota_ia,
+                    devolucion: fila.feedback_json
+                })
+            }
+            porAlumno.set(fila.alumno_cedula_alumno, preguntas)
+        }
+
+        return res.status(200).json({
+            evaluacion: { id: evaluacion.id_evaluacion, titulo: evaluacion.titulo },
+            resultados: alumnos.map(alumno => ({
+                ...alumno,
+                preguntas: porAlumno.get(alumno.cedula_alumno) || []
+            }))
+        })
+    } catch (error) {
+        console.error(error)
+        return res.status(500).json({ mensaje: "Error interno del servidor" })
+    }
+}
+
+const calificarRespuestaAlumno = async (req, res) => {
+    try {
+        const idEvaluacion = Number(req.params.id)
+        const idRespuesta = Number(req.params.idRespuesta)
+        const nota = Number(req.body?.nota)
+        if (!Number.isInteger(idEvaluacion) || idEvaluacion <= 0 ||
+            !Number.isInteger(idRespuesta) || idRespuesta <= 0 ||
+            !Number.isFinite(nota) || nota < 0 || nota > 10) {
+            return res.status(400).json({ mensaje: "La nota debe ser un número entre 0 y 10" })
+        }
+
+        // El UPDATE queda limitado a respuestas de evaluaciones del docente autenticado.
+        const [resultado] = await pool.query(`
+            UPDATE respuesta r
+            INNER JOIN alumno_consigna ac
+                ON ac.id_asignacion = r.alumno_consigna_id_asignacion
+            INNER JOIN evaluacion e
+                ON e.id_evaluacion = ac.evaluacion_id_evaluacion
+            INNER JOIN clase c ON c.id_clase = e.id_clase
+            INNER JOIN login l
+                ON l.profesor_cedula_profesor = c.profesor_cedula_profesor
+            SET r.nota_final = ?
+            WHERE r.id_respuesta = ?
+              AND e.id_evaluacion = ?
+              AND l.id_login = ?
+              AND l.rol = 'profesor'
+        `, [nota, idRespuesta, idEvaluacion, req.user.id])
+
+        if (resultado.affectedRows === 0) {
+            // MySQL puede informar cero filas modificadas cuando se vuelve a guardar la misma nota.
+            const [existentes] = await pool.query(`
+                SELECT r.id_respuesta
+                FROM respuesta r
+                INNER JOIN alumno_consigna ac ON ac.id_asignacion = r.alumno_consigna_id_asignacion
+                INNER JOIN evaluacion e ON e.id_evaluacion = ac.evaluacion_id_evaluacion
+                INNER JOIN clase c ON c.id_clase = e.id_clase
+                INNER JOIN login l ON l.profesor_cedula_profesor = c.profesor_cedula_profesor
+                WHERE r.id_respuesta = ? AND e.id_evaluacion = ? AND l.id_login = ?
+            `, [idRespuesta, idEvaluacion, req.user.id])
+            if (existentes.length === 0) {
+                return res.status(404).json({ mensaje: "Respuesta no encontrada para esta evaluación" })
+            }
+        }
+        return res.status(200).json({ mensaje: "Nota guardada", nota })
+    } catch (error) {
+        console.error(error)
+        return res.status(500).json({ mensaje: "Error interno del servidor" })
+    }
+}
+
 export {
     crearEvaluacion,
+    obtenerEvaluacionesProfesor,
+    eliminarEvaluacion,
     agregarPreguntaAEvaluacion,
     obtenerPreguntasDeEvaluacion,
-    eliminarPreguntaDeEvaluacion
+    eliminarPreguntaDeEvaluacion,
+    obtenerResultadosProfesor,
+    calificarRespuestaAlumno
 }
 </file>
 
@@ -2453,61 +3934,75 @@ export {
 
 <file path="src/middlewares/auth.js">
 import jwt from "jsonwebtoken"
+import { pool } from "../config/database.js"
 
-/**
- * Valida token antes de pasar al controlador
- * 
- * @param {import('express').Request} req
- * @param {import('express').Response} res
- * @param {import('express').NextFunction} next
- */
-
-
-const auth = (req, res, next) => {
+const auth = async (req, res, next) => {
     try {
-        // Obtengo autorización
-        const authHeader = req.headers.authorization;
+        const authHeader = req.headers.authorization
 
-        // Verifico si envió token
         if (!authHeader) {
             return res.status(401).json({
                 mensaje: "Token no proporcionado"
-            });
+            })
         }
 
-        // Obtengo el token
-        const token = authHeader.split(" ")[1];
+        const [tipo, token] = authHeader.split(" ")
 
-        // Verifico si existe el token
-        if (!token) {
+        if (tipo !== "Bearer" || !token) {
             return res.status(401).json({
-                mensaje: "Acceso denegado"
-            });
+                mensaje: "Formato de autorización inválido"
+            })
         }
 
-        // Verifico JWT y guardo el decoded en req.user
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        req.user = decoded;
+        const decoded = jwt.verify(token, process.env.JWT_SECRET)
+
+        const [cuentas] = await pool.query(
+            `
+            SELECT id_login, usuario, rol, estado
+            FROM login
+            WHERE id_login = ?
+            `,
+            [decoded.id]
+        )
+
+        if (cuentas.length === 0) {
+            return res.status(401).json({
+                mensaje: "La cuenta asociada al token ya no existe"
+            })
+        }
+
+        const cuenta = cuentas[0]
+
+        if (cuenta.estado !== "activo") {
+            return res.status(403).json({
+                mensaje: cuenta.estado === "suspendido"
+                    ? "La cuenta está suspendida"
+                    : "La cuenta está eliminada"
+            })
+        }
+
+        // Se usan los datos vigentes de la base, no el rol viejo del token.
+        req.user = {
+            id: cuenta.id_login,
+            usuario: cuenta.usuario,
+            // Unifica el rol vigente antes de aplicar middleware y lógica de controladores.
+            rol: String(cuenta.rol || "").trim().toLowerCase()
+        }
 
         next()
-
     } catch (error) {
-
-        // Si el token es inválido
-        if (error.name === "JsonWebTokenError") {
+        if (
+            error.name === "JsonWebTokenError" ||
+            error.name === "TokenExpiredError"
+        ) {
             return res.status(401).json({
-                mensaje: "Token Inválido"
-            });
+                mensaje: error.name === "TokenExpiredError"
+                    ? "Token caducado"
+                    : "Token inválido"
+            })
         }
 
-        // Si el token expiró
-        if (error.name === "TokenExpiredError") {
-            return res.status(401).json({
-                mensaje: "Token caducado"
-            });
-        }
-
-        console.error(error);
+        console.error(error)
 
         return res.status(500).json({
             mensaje: "Error interno del servidor"
@@ -2600,21 +4095,64 @@ const roleAdmin = (req, res, next) => {
         })
     }
 }
+/**
+ * Valida que ese usuario sea admin o profesor
+ *
+ * @param {import('express').Request} req
+ * @param {import('express').Response} res
+ * @param {import('express').NextFunction} next
+ */
+
+const roleRevisorCuenta = (req, res, next) => {
+    if (!["admin", "profesor"].includes(req.user?.rol)) {
+        return res.status(403).json({
+            mensaje: "Solo un docente o administrador puede revisar solicitudes"
+        })
+    }
+
+    next()
+}
+
+/**
+ * Valida que el solicitante de la informacion sea alumno o docente
+ *
+ * @param {import('express').Request} req
+ * @param {import('express').Response} res
+ * @param {import('express').NextFunction} next
+ */
+
+const roleSolicitanteCuenta = (req, res, next) => {
+    if (!["alumno", "profesor"].includes(req.user?.rol)) {
+        return res.status(403).json({
+            mensaje: "Solo alumnos y docentes pueden solicitar acciones sobre cuentas"
+        })
+    }
+
+    next()
+}
 
 export {
     roleProfesor,
     roleAlumno,
-    roleAdmin
+    roleAdmin,
+    roleRevisorCuenta,
+    roleSolicitanteCuenta
 }
 </file>
 
 <file path="src/middlewares/upload.js">
 import multer from "multer"
-import path from "path"
+import path from "node:path"
+import fs from "node:fs"
+import { fileURLToPath } from "node:url"
+
+// La carpeta se fija junto al backend para que la carga no dependa del cwd.
+const uploadsDir = fileURLToPath(new URL("../../uploads/", import.meta.url))
+fs.mkdirSync(uploadsDir, { recursive: true })
 
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
-        cb(null, "uploads/")
+        cb(null, uploadsDir)
     },
 
     filename: (req, file, cb) => {
@@ -2633,7 +4171,9 @@ const extensionesPermitidas = [
     ".js",
     ".json",
     ".txt",
-    ".zip"
+    ".zip",
+    ".h",
+    ".ts"
 ]
 
 const fileFilter = (req, file, cb) => {
@@ -2649,7 +4189,7 @@ const upload = multer({
     storage,
     fileFilter,
     limits: {
-        fileSize: 10 * 1024 * 1024 
+        fileSize: 10_000_000 
     }
 })
 
@@ -2710,54 +4250,88 @@ import {
     obtenerProgresoEvaluacion,
     finalizarEvaluacion,
     subirArchivo,
-    obtenerResultadoEvaluacion
+    obtenerResultadoEvaluacion,
+    obtenerMisClasesAlumno,
 } from "../controllers/alumnoEvaluacionController.js"
 const router = Router()
-router.use(auth, roleAlumno)
+
+router.use(auth)
 
 router.get(
     "/perfil",
+    roleAlumno,
     obtenerMiPerfil
 )
 
 router.get(
+    "/perfil",
+    roleAlumno,
+    obtenerMiPerfil
+)
+
+router.get(
+    "/clases",
+    roleAlumno,
+    obtenerMisClasesAlumno
+)
+
+router.get(
     "/evaluaciones",
+    roleAlumno,
     obtenerEvaluaciones
 )
 
 router.post(
     "/evaluaciones/:id/iniciar",
+    roleAlumno,
     iniciarEvaluacion
 )
 
 
 router.post(
     "/evaluaciones/respuestas/:id",
+    roleAlumno,
     guardarRespuesta
 )
 
 router.get(
     "/evaluaciones/:id/progreso",
+    roleAlumno,
     obtenerProgresoEvaluacion
 )
 
 router.get(
     "/evaluaciones/:id/resultados",
+    roleAlumno,
     obtenerResultadoEvaluacion)
 
 router.post(
     "/evaluaciones/:id/finalizar",
+    roleAlumno,
     finalizarEvaluacion
 )
 
 router.post(
     "/evaluaciones/entrega/:id",
+    roleAlumno,
     (req, res, next) => {
         upload.single("archivo")(req, res, (error) => {
             if (error) {
                 if (error.message === "Tipo de archivo no permitido") {
                     return res.status(400).json({
                         mensaje: "Tipo de archivo no permitido"
+                    })
+                }
+
+                if (error.code === "LIMIT_FILE_SIZE") {
+                    return res.status(413).json({
+                        mensaje: "El archivo supera el tamaño permitido"
+                    })
+                }
+
+                if (error.code === "LIMIT_UNEXPECTED_FILE") {
+                    return res.status(400).json({
+                        mensaje: "El campo del archivo no es válido o se enviaron demasiados archivos"
                     })
                 }
 
@@ -2803,13 +4377,14 @@ export default router;
 
 <file path="src/routes/authRoutes.js">
 import { Router } from "express"
-import { crearUsuario, crearCuentaProfesor, login } from "../controllers/authController.js"
+import { crearUsuario, crearCuentaProfesor, login, consultarSolicitudAlumno } from "../controllers/authController.js"
 import { auth } from "../middlewares/auth.js"
 import { roleAdmin } from "../middlewares/role.js"
 import { validarBody } from "../middlewares/validate.js"
 import { registroAlumnoSchema, 
         registroProfeSchema,
         loginSchema } from "../schemas/authSchemas.js"
+import { consultarSolicitudSchema } from "../schemas/cuentaSchemas.js"
 
 const router = Router()
 
@@ -2818,6 +4393,11 @@ router.post(
         auth, roleAdmin, 
         validarBody(registroProfeSchema), 
         crearCuentaProfesor)
+
+router.post(
+        "/register/estado",
+        validarBody(consultarSolicitudSchema),
+        consultarSolicitudAlumno)
         
 router.post("/register", validarBody(registroAlumnoSchema), crearUsuario)
 router.post("/login", validarBody(loginSchema), login)
@@ -2924,24 +4504,125 @@ router.delete(
 export default router
 </file>
 
+<file path="src/routes/cuentaRoutes.js">
+import { Router } from "express"
+import { auth } from "../middlewares/auth.js"
+import { roleRevisorCuenta, roleAdmin, roleSolicitanteCuenta } from "../middlewares/role.js"
+import { validarBody, validarParams } from "../middlewares/validate.js"
+import {
+    idSolicitudParamsSchema,
+    resolverSolicitudAltaSchema,
+    idCuentaParamsSchema,
+    cambiarEstadoCuentaSchema,
+    solicitarGestionCuentaSchema,
+    resolverSolicitudGestionSchema
+} from "../schemas/cuentaSchemas.js"
+import {
+    obtenerSolicitudesAltaAlumno,
+    resolverSolicitudAltaAlumno,
+    obtenerCuentas,
+    cambiarEstadoCuenta,
+    solicitarGestionCuenta,
+    obtenerSolicitudesGestion,
+    resolverSolicitudGestion,
+    obtenerMisSolicitudesGestion
+} from "../controllers/cuentaController.js"
+
+const router = Router()
+
+router.use(auth)
+
+router.get(
+    "/solicitudes/alumnos",
+    roleRevisorCuenta,
+    obtenerSolicitudesAltaAlumno)
+
+router.get(
+    "/",
+    roleAdmin,
+    obtenerCuentas
+)
+
+router.get(
+    "/solicitudes/gestion",
+    roleAdmin,
+    obtenerSolicitudesGestion
+)
+
+router.get(
+    "/solicitudes/gestion/mias",
+    roleSolicitanteCuenta,
+    obtenerMisSolicitudesGestion
+)
+
+router.patch(
+    "/solicitudes/gestion/:id",
+    roleAdmin,
+    validarParams(idSolicitudParamsSchema),
+    validarBody(resolverSolicitudGestionSchema),
+    resolverSolicitudGestion
+)
+
+router.post(
+    "/:id/solicitudes",
+    roleSolicitanteCuenta,
+    validarParams(idCuentaParamsSchema),
+    validarBody(solicitarGestionCuentaSchema),
+    solicitarGestionCuenta
+)
+
+router.patch(
+    "/:id/estado",
+    roleAdmin,
+    validarParams(idCuentaParamsSchema),
+    validarBody(cambiarEstadoCuentaSchema),
+    cambiarEstadoCuenta
+)
+
+router.patch(
+    "/solicitudes/alumnos/:id",
+    roleRevisorCuenta,
+    validarParams(idSolicitudParamsSchema),
+    validarBody(resolverSolicitudAltaSchema),
+    resolverSolicitudAltaAlumno)
+
+export default router
+</file>
+
 <file path="src/routes/evaluacionRoutes.js">
 import { Router } from "express"
 
 import {
     crearEvaluacion,
+    obtenerEvaluacionesProfesor,
+    eliminarEvaluacion,
     agregarPreguntaAEvaluacion,
     obtenerPreguntasDeEvaluacion,
-    eliminarPreguntaDeEvaluacion
+    eliminarPreguntaDeEvaluacion,
+    obtenerResultadosProfesor,
+    calificarRespuestaAlumno
 } from "../controllers/evaluacionController.js"
 
 import { auth } from "../middlewares/auth.js"
 import { roleProfesor } from "../middlewares/role.js"
 
 const router = Router()
+
 router.use(auth, roleProfesor)
+
+router.get(
+    "/",
+    obtenerEvaluacionesProfesor
+)
+
 router.post(
     "/",
     crearEvaluacion
+)
+
+router.delete(
+    "/:id",
+    eliminarEvaluacion
 )
 
 router.post(
@@ -2953,6 +4634,10 @@ router.get(
     "/:id/preguntas",
     obtenerPreguntasDeEvaluacion
 )
+
+router.get("/:id/resultados", obtenerResultadosProfesor)
+
+router.patch("/:id/resultados/:idRespuesta", calificarRespuestaAlumno)
 
 router.delete(
     "/:id/preguntas/:idConsigna",
@@ -3106,6 +4791,83 @@ export {
 }
 </file>
 
+<file path="src/schemas/cuentaSchemas.js">
+import { z } from "zod"
+
+const idSolicitudParamsSchema = z.object({
+    id: z.coerce.number()
+        .int()
+        .positive()
+        .max(Number.MAX_SAFE_INTEGER)
+})
+
+const resolverSolicitudAltaSchema = z.object({
+    decision: z.enum(["aprobar", "rechazar"]),
+    motivo: z.string().trim().max(2000).optional()
+}).refine(
+    datos =>
+        datos.decision !== "rechazar" ||
+        Boolean(datos.motivo && datos.motivo.length >= 5),
+    {
+        path: ["motivo"],
+        message: "El rechazo requiere un motivo de al menos 5 caracteres"
+    }
+)
+
+const consultarSolicitudSchema = z.object({
+    id: z.coerce.number()
+        .int()
+        .positive()
+        .max(Number.MAX_SAFE_INTEGER),
+    token: z.string()
+        .min(32)
+        .max(128)
+})
+
+const idCuentaParamsSchema = z.object({
+    id: z.coerce.number()
+        .int()
+        .positive()
+        .max(2147483647)
+})
+
+const cambiarEstadoCuentaSchema = z.object({
+    estado: z.enum(["activo", "suspendido", "eliminado"]),
+    motivo: z.string().trim().max(2000).optional()
+})
+
+const solicitarGestionCuentaSchema = z.object({
+    accion: z.enum(["suspender", "eliminar"]),
+    motivo: z.string()
+        .trim()
+        .min(5, "Explicá el motivo con al menos 5 caracteres")
+        .max(2000)
+})
+
+const resolverSolicitudGestionSchema = z.object({
+    decision: z.enum(["aprobar", "rechazar"]),
+    motivo: z.string().trim().max(2000).optional()
+}).refine(
+    datos =>
+        datos.decision !== "rechazar" ||
+        Boolean(datos.motivo && datos.motivo.length >= 5),
+    {
+        path: ["motivo"],
+        message: "El rechazo requiere un motivo de al menos 5 caracteres"
+    }
+)
+
+export {
+    idSolicitudParamsSchema,
+    resolverSolicitudAltaSchema,
+    consultarSolicitudSchema,
+    idCuentaParamsSchema,
+    cambiarEstadoCuentaSchema,
+    solicitarGestionCuentaSchema,
+    resolverSolicitudGestionSchema
+}
+</file>
+
 <file path="src/services/ollamaGradingService.js">
 import fs from "node:fs/promises"
 import path from "node:path"
@@ -3247,6 +5009,10 @@ const leerEntrega = async (rutaArchivo, nombreArchivo) => {
     }]
 }
 
+const esListaDeTextos = (valor) =>
+    Array.isArray(valor) &&
+    valor.every(elemento => typeof elemento === "string")
+
 const validarCorreccion = (contenido) => {
     let correccion
 
@@ -3290,6 +5056,13 @@ const validarCorreccion = (contenido) => {
         }
     }
 
+    if (
+        !esListaDeTextos(correccion.fortalezas) ||
+        !esListaDeTextos(correccion.mejoras)
+    ) {
+        throw new Error("Ollama devolvió listas de fortalezas o mejoras inválidas")
+    }
+
     return {
         nota: Math.round(nota * 100) / 100,
         resumen: correccion.resumen.slice(0, 3000),
@@ -3328,7 +5101,7 @@ const corregirEntregaCodigo = async ({
         const fuentes = await leerEntrega(rutaArchivo, nombreArchivo)
         const baseUrl = (process.env.OLLAMA_URL || "http://127.0.0.1:11434").replace(/\/$/, "")
         const controlador = new AbortController()
-        const timeout = setTimeout(() => controlador.abort(), 120_000)
+        const timeout = setTimeout(() => controlador.abort(), 300_000)
 
         let datosOllama
         try {
@@ -3422,11 +5195,22 @@ import consignaRoutes from "./routes/consignaRoutes.js"
 import evaluacionRoutes from "./routes/evaluacionRoutes.js"
 import claseRoutes from "./routes/claseRoutes.js"
 import helmet from "helmet"
+import cuentaRoutes from "./routes/cuentaRoutes.js"
+import dotenv from "dotenv"
+import { fileURLToPath } from "node:url"
+
+// Carga la configuración antes de construir CORS, también si app.js se importa directamente.
+dotenv.config({ path: fileURLToPath(new URL("../.env", import.meta.url)) })
 
 const app = express()
 
 app.use(helmet())
-app.use(cors())
+// Restringe el acceso desde navegador a los orígenes configurados en despliegue.
+const origins = (process.env.CORS_ORIGINS || "http://localhost:5173")
+    .split(",")
+    .map(origin => origin.trim())
+    .filter(Boolean)
+app.use(cors({ origin: origins }))
     
 app.use(express.json())
 
@@ -3437,16 +5221,19 @@ app.use("/api/auth", authRoutes)
 app.use("/api/consignas", consignaRoutes)
 app.use("/api/evaluaciones", evaluacionRoutes)
 app.use("/api/clases", claseRoutes)
+app.use("/api/cuentas", cuentaRoutes)
 
 export default app
 </file>
 
 <file path="src/server.js">
 import dotenv from "dotenv"
+import { fileURLToPath } from "node:url"
 import app from "./app.js"
 import { verificarConexion } from "./config/database.js"
 
-dotenv.config();
+// Carga backend/.env aunque el servidor se lance desde la raíz del repositorio.
+dotenv.config({ path: fileURLToPath(new URL("../.env", import.meta.url)) });
 
 const PORT = process.env.PORT || 2323
 
@@ -3471,7 +5258,7 @@ node_modules/
 
 - **Ollama** ejecuta localmente el modelo de lenguaje. El proyecto usa `qwen2.5-coder:7b` por defecto y no necesita una clave de proveedor externo.
 - **`src/services/ollamaGradingService.js`** lee el código fuente o el ZIP, prepara la consigna, la respuesta de referencia y la rúbrica, llama a Ollama y valida el JSON devuelto.
-- **`src/middlewares/upload.js`** recibe el archivo multipart `archivo`, filtra extensiones permitidas y limita la subida a 5 MB.
+- **`src/middlewares/upload.js`** recibe el archivo multipart `archivo`, filtra extensiones permitidas y limita la subida a 10 MB.
 - **`src/controllers/alumnoEvaluacionController.js`** comprueba que la pregunta asignada pertenezca al alumno, registra la entrega, solicita la corrección y expone los resultados guardados.
 - **`migrations/001_ollama_correcciones.sql`** agrega una rúbrica a cada consigna y crea la tabla que persiste el estado, la nota, la devolución, el modelo y los errores de corrección.
 - Esta integración añade los endpoints de backend. La interfaz Vue del repositorio todavía no muestra la carga de código ni la devolución de IA.
@@ -3548,7 +5335,7 @@ Los resultados guardados están disponibles con `GET /api/alumnos/evaluaciones/I
 
 ## Límites
 
-- Se admiten archivos `.c`, `.cpp`, `.cs`, `.h`, `.java`, `.py`, `.ts`, `.html`, `.css`, `.js`, `.json` y `.txt`, o un `.zip` con archivos de esos tipos. El ZIP se lee sin extraerlo al disco; se analizan hasta 20 fuentes, 150 KB por archivo y 400 KB en total. La subida se limita a 10 MB.
+- Se admiten archivos `.c`, `.cpp`, `.cs`, `.h`, `.java`, `.py`, `.ts`, `.html`, `.css`, `.js`, `.json` y `.txt`, o un `.zip` con archivos de esos tipos. El ZIP se lee sin extraerlo al disco; se analizan hasta 5 fuentes, con un máximo de 10.000.000 bytes por archivo y en total. La subida también se limita a 10.000.000 bytes (10 MB decimales).
 - Ollama revisa estáticamente el contenido; el backend no ejecuta el código del alumno. La nota no demuestra que el programa compile o funcione.
 - La nota se genera en escala de 0 a 10 y se almacena aparte de `respuesta.nota_final`.
 - La corrección es sincrónica y puede tardar hasta dos minutos; durante ese tiempo la petición de subida sigue abierta.
@@ -3557,7 +5344,7 @@ Los resultados guardados están disponibles con `GET /api/alumnos/evaluaciones/I
 
 <file path="package.json">
 {
-  "name": "sistema-de-evaluacion",
+  "name": "sistema-evaluacion_profesorhtml",
   "version": "1.0.0",
   "description": "",
   "main": "index.js",

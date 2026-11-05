@@ -141,6 +141,31 @@ const crearEvaluacion = async (req, res) => {
 
 const obtenerEvaluacionesProfesor = async (req, res) => {
     try {
+        // Parámetros recibidos por la URL
+        const ordenarPor = req.query.ordenarPor || "fecha"
+        const orden = req.query.orden || "desc"
+
+        // Validar el campo por el que se quiere ordenar
+        if (!["fecha", "id"].includes(ordenarPor)) {
+            return res.status(400).json({
+                mensaje: "El campo de orden debe ser 'fecha' o 'id'"
+            })
+        }
+
+        // Validar la dirección del orden
+        if (!["asc", "desc"].includes(orden)) {
+            return res.status(400).json({
+                mensaje: "El orden debe ser 'asc' o 'desc'"
+            })
+        }
+
+        // Seleccionar la columna de forma segura
+        const columnaOrden = ordenarPor === "fecha"
+            ? "e.fecha"
+            : "e.id_evaluacion"
+
+        const ordenSQL = orden.toUpperCase()
+
         const [evaluaciones] = await pool.query(
             `
             SELECT
@@ -160,7 +185,7 @@ const obtenerEvaluacionesProfesor = async (req, res) => {
                 ON l.profesor_cedula_profesor = c.profesor_cedula_profesor
             WHERE l.id_login = ?
             AND l.rol = 'profesor'
-            ORDER BY e.fecha DESC, e.id_evaluacion DESC
+            ORDER BY ${columnaOrden} ${ordenSQL}, e.id_evaluacion DESC
             `,
             [req.user.id]
         )
@@ -177,7 +202,6 @@ const obtenerEvaluacionesProfesor = async (req, res) => {
         })
     }
 }
-
 const eliminarEvaluacion = async (req, res) => {
     let conexion
 

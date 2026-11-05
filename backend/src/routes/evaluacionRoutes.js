@@ -44,6 +44,7 @@ router.get(
 )
 
 router.get("/:id/resultados", obtenerResultadosProfesor)
+
 router.patch("/:id/resultados/:idRespuesta", calificarRespuestaAlumno)
 
 router.delete(
