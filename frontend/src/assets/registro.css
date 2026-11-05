@@ -1,0 +1,296 @@
+
+* {
+  box-sizing: border-box;
+}
+
+.pagina-registro {
+  min-height: 100vh;
+  background: #F3EEDB;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 30px 6%;
+  color: #493629;
+  font-family: inherit;
+}
+
+.volver-inicio {
+  align-self: flex-start;
+  color: #493629;
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 14px;
+  transition: color 0.2s ease;
+}
+
+.volver-inicio:hover {
+  color: #84966D;
+}
+
+.contenedor-registro {
+  width: 100%;
+  max-width: 1100px;
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  align-items: center;
+  gap: 65px;
+  padding: 35px 0;
+}
+
+.registro-personaje {
+  height: 100%;
+  min-height: 650px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  position: relative;
+  justify-content: flex-start;
+  padding-top: 20px;
+}
+
+.registro-personaje h2 {
+  order: 0;
+  font-size: 30px;
+  color: #493629;
+  margin: 60px 0 10px;
+}
+
+.registro-personaje p {
+  order: 1;
+  color: #806044;
+  font-size: 16px;
+}
+
+.personaje-etiqueta {
+  order: 2;
+  background: #FFFEF9;
+  color: #493629;
+  border: 2px solid #806044;
+  border-radius: 12px;
+  padding: 13px 22px;
+  font-size: 17px;
+  font-weight: 800;
+  position: relative;
+  margin-top: auto;
+  margin-bottom: -100px;
+  box-shadow: 4px 4px 0 #806044;
+  z-index: 2;
+}
+
+.personaje-etiqueta::after {
+  content: "";
+  position: absolute;
+  width: 13px;
+  height: 13px;
+  background: #FFFEF9;
+  border-right: 2px solid #806044;
+  border-bottom: 2px solid #806044;
+  transform: rotate(45deg);
+  bottom: -8px;
+  left: 50%;
+}
+
+.registro-personaje img {
+  order: 3;
+  width: 100%;
+  max-width: 430px;
+  height: 430px;
+  object-fit: contain;
+  image-rendering: pixelated;
+  margin-bottom: -30px;
+}
+
+.ventana-registro {
+  width: 100%;
+  max-width: 460px;
+  background: #FFFEF9;
+  border: 2px solid #806044;
+  border-radius: 22px;
+  padding: 38px;
+  box-shadow: 9px 9px 0 #806044;
+}
+
+.registro-encabezado {
+  margin-bottom: 28px;
+}
+
+.registro-etiqueta {
+  display: inline-block;
+  background: #E8E0CF;
+  color: #806044;
+  padding: 7px 12px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+  margin-bottom: 13px;
+}
+
+.registro-encabezado h1 {
+  font-size: 34px;
+  color: #493629;
+  margin: 0 0 9px;
+}
+
+.descripcion {
+  color: #806044;
+  font-size: 14px;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.campo {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 19px;
+}
+
+.campo label {
+  color: #493629;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.campo input {
+  width: 100%;
+  padding: 13px 15px;
+  border: 1.5px solid #D5C8B5;
+  border-radius: 9px;
+  background: #FFFEF9;
+  color: #493629;
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.campo input::placeholder {
+  color: #B2A594;
+}
+
+.campo input:focus {
+  border-color: #806044;
+  box-shadow: 0 0 0 3px rgba(128, 96, 68, 0.13);
+}
+
+.ventana-registro button {
+  width: 100%;
+  padding: 14px;
+  border: none;
+  border-radius: 9px;
+  background: #493629;
+  color: #FFFEF9;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.2s ease;
+}
+
+.ventana-registro button:hover:not(:disabled) {
+  background: #806044;
+  transform: translateY(-2px);
+}
+
+.ventana-registro button:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.mensaje {
+  color: #A33E35;
+  font-size: 13px;
+  text-align: center;
+  margin: 0 0 15px;
+}
+
+.mensaje.exito {
+  color: #71865D;
+}
+
+.enlace-login {
+  text-align: center;
+  color: #806044;
+  font-size: 13px;
+  margin: 23px 0 0;
+}
+
+.enlace-login a {
+  color: #493629;
+  font-weight: 800;
+  text-decoration: none;
+  margin-left: 4px;
+}
+
+.enlace-login a:hover {
+  color: #84966D;
+}
+
+@media (max-width: 800px) {
+  .contenedor-registro {
+    grid-template-columns: 1fr;
+    gap: 30px;
+    padding: 30px 0;
+  }
+
+  .registro-personaje {
+    height: auto;
+    min-height: 0;
+    padding-top: 10px;
+  }
+
+  .registro-personaje img {
+    max-width: 300px;
+    height: 280px;
+    margin-bottom: 0;
+  }
+
+  .personaje-etiqueta {
+    margin-top: 25px;
+    margin-bottom: 10px;
+  }
+
+  .registro-personaje h2 {
+    font-size: 25px;
+  }
+
+  .ventana-registro {
+    max-width: 500px;
+    margin: 0 auto;
+  }
+}
+
+@media (max-width: 480px) {
+  .pagina-registro {
+    padding: 22px 5%;
+  }
+
+  .ventana-registro {
+    padding: 26px 21px;
+  }
+
+  .registro-encabezado h1 {
+    font-size: 29px;
+  }
+
+  .registro-personaje img {
+    height: 230px;
+  }
+}
+.solicitud-seguimiento {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  margin: 12px 0;
+  border: 1px solid #d7d4c7;
+  border-radius: 12px;
+  background: #f6f4eb;
+}
+
+.solicitud-seguimiento code {
+  overflow-wrap: anywhere;
+  padding: 9px;
+  border-radius: 7px;
+  background: #fff;
+}

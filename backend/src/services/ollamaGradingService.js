@@ -138,7 +138,7 @@ const leerEntrega = async (rutaArchivo, nombreArchivo) => {
     }]
 }
 
-const esListaDeTextos = (valor) => 
+const esListaDeTextos = (valor) =>
     Array.isArray(valor) &&
     valor.every(elemento => typeof elemento === "string")
 
@@ -186,7 +186,7 @@ const validarCorreccion = (contenido) => {
     }
 
     if (
-        !esListaDeTextos(correccion.fortalezas) || 
+        !esListaDeTextos(correccion.fortalezas) ||
         !esListaDeTextos(correccion.mejoras)
     ) {
         throw new Error("Ollama devolvió listas de fortalezas o mejoras inválidas")
@@ -230,7 +230,7 @@ const corregirEntregaCodigo = async ({
         const fuentes = await leerEntrega(rutaArchivo, nombreArchivo)
         const baseUrl = (process.env.OLLAMA_URL || "http://127.0.0.1:11434").replace(/\/$/, "")
         const controlador = new AbortController()
-        const timeout = setTimeout(() => controlador.abort(), 120_000)
+        const timeout = setTimeout(() => controlador.abort(), 300_000)
 
         let datosOllama
         try {

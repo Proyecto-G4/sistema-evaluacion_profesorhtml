@@ -6,7 +6,9 @@ import {
     eliminarEvaluacion,
     agregarPreguntaAEvaluacion,
     obtenerPreguntasDeEvaluacion,
-    eliminarPreguntaDeEvaluacion
+    eliminarPreguntaDeEvaluacion,
+    obtenerResultadosProfesor,
+    calificarRespuestaAlumno
 } from "../controllers/evaluacionController.js"
 
 import { auth } from "../middlewares/auth.js"
@@ -40,6 +42,9 @@ router.get(
     "/:id/preguntas",
     obtenerPreguntasDeEvaluacion
 )
+
+router.get("/:id/resultados", obtenerResultadosProfesor)
+router.patch("/:id/resultados/:idRespuesta", calificarRespuestaAlumno)
 
 router.delete(
     "/:id/preguntas/:idConsigna",

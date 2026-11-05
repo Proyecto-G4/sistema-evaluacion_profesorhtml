@@ -31,10 +31,14 @@ const crearEvaluacion = async (req, res) => {
             })
         }
 
+        const fechaParseada = typeof fecha === "string"
+            ? new Date(`${fecha}T00:00:00Z`)
+            : null
         if (
             typeof fecha !== "string" ||
             !/^\d{4}-\d{2}-\d{2}$/.test(fecha) ||
-            new Date(`${fecha}T00:00:00Z`).toISOString().slice(0, 10) !== fecha
+            !fechaParseada || Number.isNaN(fechaParseada.getTime()) ||
+            fechaParseada.toISOString().slice(0, 10) !== fecha
         ) {
             return res.status(400).json({
                 mensaje: "La fecha debe tener el formato YYYY-MM-DD y ser válida"
@@ -465,11 +469,153 @@ const eliminarPreguntaDeEvaluacion = async (req, res) => {
     }
 }
 
+const obtenerResultadosProfesor = async (req, res) => {
+    try {
+        const id = Number(req.params.id)
+        if (!Number.isInteger(id) || id <= 0) {
+            return res.status(400).json({ mensaje: "El ID de la evaluación no es válido" })
+        }
+
+        // Primero se confirma propiedad de la evaluación antes de leer datos de alumnos.
+        const [evaluaciones] = await pool.query(`
+            SELECT e.id_evaluacion, e.id_clase, e.titulo
+            FROM evaluacion e
+            INNER JOIN clase c ON c.id_clase = e.id_clase
+            INNER JOIN login l ON l.profesor_cedula_profesor = c.profesor_cedula_profesor
+            WHERE e.id_evaluacion = ? AND l.id_login = ? AND l.rol = 'profesor'
+        `, [id, req.user.id])
+
+        if (evaluaciones.length === 0) {
+            return res.status(404).json({ mensaje: "Evaluación no encontrada" })
+        }
+
+        const evaluacion = evaluaciones[0]
+        const [alumnos] = await pool.query(`
+            SELECT a.cedula_alumno, a.nombre, a.apellido,
+                   ae.estado, ae.fecha_inicio, ae.fecha_finalizacion
+            FROM clase_alumno ca
+            INNER JOIN alumno a ON a.cedula_alumno = ca.alumno_cedula_alumno
+            LEFT JOIN alumno_evaluacion ae
+                ON ae.alumno_cedula_alumno = ca.alumno_cedula_alumno
+               AND ae.evaluacion_id_evaluacion = ?
+            WHERE ca.id_clase = ? AND ca.estado = 'activo'
+            ORDER BY a.apellido, a.nombre
+        `, [id, evaluacion.id_clase])
+
+        const [entregas] = await pool.query(`
+            SELECT ac.alumno_cedula_alumno, ac.id_asignacion, c.consigna,
+                   r.id_respuesta, r.respuesta, r.nota_final,
+                   ec.id_entrega_codigo, ec.nombre_archivo,
+                   cc.estado AS estado_correccion, cc.nota AS nota_ia,
+                   cc.feedback_json
+            FROM alumno_consigna ac
+            INNER JOIN consigna c ON c.id_consigna = ac.consigna_id_consigna
+            LEFT JOIN respuesta r
+                ON r.alumno_consigna_id_asignacion = ac.id_asignacion
+            LEFT JOIN entrega_codigo ec
+                ON ec.alumno_consigna_id_asignacion = ac.id_asignacion
+            LEFT JOIN correccion_codigo cc
+                ON cc.entrega_codigo_id = ec.id_entrega_codigo
+            WHERE ac.evaluacion_id_evaluacion = ?
+            ORDER BY ac.alumno_cedula_alumno, ac.id_asignacion, ec.id_entrega_codigo
+        `, [id])
+
+        const porAlumno = new Map()
+        for (const fila of entregas) {
+            const preguntas = porAlumno.get(fila.alumno_cedula_alumno) || []
+            let pregunta = preguntas.find(item => item.id_asignacion === fila.id_asignacion)
+            if (!pregunta) {
+                pregunta = {
+                    id_asignacion: fila.id_asignacion,
+                    consigna: fila.consigna,
+                    id_respuesta: fila.id_respuesta,
+                    respuesta: fila.respuesta,
+                    nota: fila.nota_final,
+                    entregas_codigo: []
+                }
+                preguntas.push(pregunta)
+            }
+            if (fila.id_entrega_codigo !== null) {
+                pregunta.entregas_codigo.push({
+                    nombre_archivo: fila.nombre_archivo,
+                    estado: fila.estado_correccion,
+                    nota: fila.nota_ia,
+                    devolucion: fila.feedback_json
+                })
+            }
+            porAlumno.set(fila.alumno_cedula_alumno, preguntas)
+        }
+
+        return res.status(200).json({
+            evaluacion: { id: evaluacion.id_evaluacion, titulo: evaluacion.titulo },
+            resultados: alumnos.map(alumno => ({
+                ...alumno,
+                preguntas: porAlumno.get(alumno.cedula_alumno) || []
+            }))
+        })
+    } catch (error) {
+        console.error(error)
+        return res.status(500).json({ mensaje: "Error interno del servidor" })
+    }
+}
+
+const calificarRespuestaAlumno = async (req, res) => {
+    try {
+        const idEvaluacion = Number(req.params.id)
+        const idRespuesta = Number(req.params.idRespuesta)
+        const nota = Number(req.body?.nota)
+        if (!Number.isInteger(idEvaluacion) || idEvaluacion <= 0 ||
+            !Number.isInteger(idRespuesta) || idRespuesta <= 0 ||
+            !Number.isFinite(nota) || nota < 0 || nota > 10) {
+            return res.status(400).json({ mensaje: "La nota debe ser un número entre 0 y 10" })
+        }
+
+        // El UPDATE queda limitado a respuestas de evaluaciones del docente autenticado.
+        const [resultado] = await pool.query(`
+            UPDATE respuesta r
+            INNER JOIN alumno_consigna ac
+                ON ac.id_asignacion = r.alumno_consigna_id_asignacion
+            INNER JOIN evaluacion e
+                ON e.id_evaluacion = ac.evaluacion_id_evaluacion
+            INNER JOIN clase c ON c.id_clase = e.id_clase
+            INNER JOIN login l
+                ON l.profesor_cedula_profesor = c.profesor_cedula_profesor
+            SET r.nota_final = ?
+            WHERE r.id_respuesta = ?
+              AND e.id_evaluacion = ?
+              AND l.id_login = ?
+              AND l.rol = 'profesor'
+        `, [nota, idRespuesta, idEvaluacion, req.user.id])
+
+        if (resultado.affectedRows === 0) {
+            // MySQL puede informar cero filas modificadas cuando se vuelve a guardar la misma nota.
+            const [existentes] = await pool.query(`
+                SELECT r.id_respuesta
+                FROM respuesta r
+                INNER JOIN alumno_consigna ac ON ac.id_asignacion = r.alumno_consigna_id_asignacion
+                INNER JOIN evaluacion e ON e.id_evaluacion = ac.evaluacion_id_evaluacion
+                INNER JOIN clase c ON c.id_clase = e.id_clase
+                INNER JOIN login l ON l.profesor_cedula_profesor = c.profesor_cedula_profesor
+                WHERE r.id_respuesta = ? AND e.id_evaluacion = ? AND l.id_login = ?
+            `, [idRespuesta, idEvaluacion, req.user.id])
+            if (existentes.length === 0) {
+                return res.status(404).json({ mensaje: "Respuesta no encontrada para esta evaluación" })
+            }
+        }
+        return res.status(200).json({ mensaje: "Nota guardada", nota })
+    } catch (error) {
+        console.error(error)
+        return res.status(500).json({ mensaje: "Error interno del servidor" })
+    }
+}
+
 export {
     crearEvaluacion,
     obtenerEvaluacionesProfesor,
     eliminarEvaluacion,
     agregarPreguntaAEvaluacion,
     obtenerPreguntasDeEvaluacion,
-    eliminarPreguntaDeEvaluacion
+    eliminarPreguntaDeEvaluacion,
+    obtenerResultadosProfesor,
+    calificarRespuestaAlumno
 }

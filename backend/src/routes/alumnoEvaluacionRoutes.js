@@ -10,7 +10,8 @@ import {
     obtenerProgresoEvaluacion,
     finalizarEvaluacion,
     subirArchivo,
-    obtenerResultadoEvaluacion
+    obtenerResultadoEvaluacion,
+    obtenerMisClasesAlumno,
 } from "../controllers/alumnoEvaluacionController.js"
 const router = Router()
 
@@ -20,6 +21,18 @@ router.get(
     "/perfil",
     roleAlumno,
     obtenerMiPerfil
+)
+
+router.get(
+    "/perfil",
+    roleAlumno,
+    obtenerMiPerfil
+)
+
+router.get(
+    "/clases",
+    roleAlumno,
+    obtenerMisClasesAlumno
 )
 
 router.get(

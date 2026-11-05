@@ -1,0 +1,275 @@
+
+.pagina-login {
+  min-height: 100vh;
+  padding: 100px 6% 50px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+  background: #F3EEDB;
+  color: #493629;
+}
+
+.pagina-login::before,
+.pagina-login::after {
+  content: "";
+  position: absolute;
+  width: 180px;
+  height: 180px;
+  background-image: radial-gradient(#A8B59A 2px, transparent 2px);
+  background-size: 18px 18px;
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+.pagina-login::before {
+  top: 35px;
+  left: 35px;
+}
+
+.pagina-login::after {
+  right: 35px;
+  bottom: 35px;
+}
+
+.volver-inicio {
+  position: absolute;
+  top: 24px;
+  left: 5%;
+  color: #493629;
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 700;
+  transition: color 0.2s ease;
+}
+
+.volver-inicio:hover {
+  color: #71865D;
+}
+
+.contenedor-login {
+  width: 100%;
+  max-width: 1000px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  align-items: center;
+  gap: 45px;
+  position: relative;
+  z-index: 1;
+}
+
+.login-personaje {
+margin-bottom: -300px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+
+}
+
+.personaje-etiqueta::after {
+  content: "";
+  position: absolute;
+  bottom: -12px;
+  left: 35px;
+  width: 18px;
+  height: 18px;
+  background: #FFFEF9;
+  border-right: 2px solid #493629;
+  border-bottom: 2px solid #493629;
+  transform: rotate(45deg);
+}
+
+.personaje-etiqueta,
+.login-etiqueta {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 2px;
+  color: #71865D;
+}
+
+.personaje-etiqueta {
+  position: relative;
+  padding: 16px 24px;
+  margin-bottom: -150px;
+  background: #FFFEF9;
+  border: 2px solid #493629;
+  border-radius: 8px;
+  color: #493629;
+  font-size: 17px;
+  font-weight: 900;
+  letter-spacing: 1px;
+  box-shadow: 5px 5px 0 #493629;
+}
+
+
+
+.login-personaje img {
+  width: 100%;
+  max-width: 550px;
+  height: 550px;
+  object-fit: contain;
+}
+
+
+.ventana-login {
+  width: 100%;
+  padding: 42px;
+  box-sizing: border-box;
+  background: #FFFEF9;
+  border: 1px solid #E5DECB;
+  border-radius: 20px;
+  box-shadow: 0 15px 40px rgba(73, 54, 41, 0.10);
+}
+
+.login-encabezado {
+  margin-bottom: 30px;
+}
+
+.login-etiqueta {
+  margin-bottom: 12px;
+}
+
+.login-encabezado h1 {
+  margin: 0 0 10px;
+  font-size: 29px;
+  line-height: 1.2;
+  color: #493629;
+}
+
+.descripcion {
+  margin: 0;
+  color: #817665;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.campo {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  margin-bottom: 22px;
+}
+
+.campo label {
+  font-size: 13px;
+  font-weight: 700;
+  color: #493629;
+}
+
+.campo input {
+  width: 100%;
+  padding: 14px 15px;
+  box-sizing: border-box;
+  border: 1px solid #DED7C6;
+  border-radius: 10px;
+  background: #FAF8F0;
+  color: #493629;
+  font: inherit;
+  font-size: 14px;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.campo input::placeholder {
+  color: #AAA18F;
+}
+
+.campo input:focus {
+  outline: none;
+  border-color: #84966D;
+  box-shadow: 0 0 0 3px rgba(132, 150, 109, 0.16);
+}
+
+.mensaje {
+  margin: 0 0 16px;
+  color: #B42318;
+  font-size: 13px;
+}
+
+.ventana-login button {
+  width: 100%;
+  padding: 15px;
+  border: none;
+  border-radius: 10px;
+  background: #71865D;
+  color: #FFFFFF;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.2s ease;
+}
+
+.ventana-login button:hover:not(:disabled) {
+  background: #5D714A;
+  transform: translateY(-2px);
+}
+
+.ventana-login button:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+
+.enlace-registro {
+  margin: 25px 0 0;
+  text-align: center;
+  color: #817665;
+  font-size: 13px;
+}
+
+.enlace-registro a {
+  color: #71865D;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.enlace-registro a:hover {
+  text-decoration: underline;
+}
+
+@media (max-width: 750px) {
+  .pagina-login {
+    padding: 85px 20px 35px;
+  }
+
+  .contenedor-login {
+    max-width: 440px;
+    grid-template-columns: 1fr;
+    gap: 15px;
+  }
+
+  .login-personaje img {
+  max-width: 260px;
+  height: 260px;
+}
+
+  .login-personaje img {
+    max-width: 190px;
+    height: 190px;
+  }
+
+  .login-personaje h2 {
+    font-size: 22px;
+  }
+
+  .login-personaje p {
+    font-size: 13px;
+  }
+
+  .ventana-login {
+    padding: 30px 25px;
+  }
+}
+
+@media (max-width: 400px) {
+  .ventana-login {
+    padding: 25px 20px;
+  }
+
+  .login-encabezado h1 {
+    font-size: 25px;
+  }
+}

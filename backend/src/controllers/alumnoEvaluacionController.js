@@ -506,21 +506,37 @@ const subirArchivo = async (req, res) => {
             });
         }
 
-        const [resultado] = await pool.query(`
-            INSERT INTO entrega_codigo (
-                nombre_archivo,
-                ruta_archivo,
-                fecha_entrega,
-                alumno_consigna_id_asignacion
-            )
-            VALUES (?, ?, CURDATE(), ?)
-        `, [
-            req.file.originalname,
-            req.file.path,
-            asignacion.id_asignacion
-        ]);
+        const conexion = await pool.getConnection()
+        let resultado
+        try {
+            await conexion.beginTransaction()
+            const [insertado] = await conexion.query(`
+                INSERT INTO entrega_codigo (
+                    nombre_archivo,
+                    ruta_archivo,
+                    fecha_entrega,
+                    alumno_consigna_id_asignacion
+                )
+                VALUES (?, ?, CURDATE(), ?)
+            `, [req.file.originalname, req.file.path, asignacion.id_asignacion])
+            resultado = insertado
 
-        archivoRegistrado = true;
+            // La respuesta y su archivo deben persistir juntos para permitir finalizar.
+            await conexion.query(`
+                UPDATE alumno_consigna
+                SET estado = 'respondida'
+                WHERE id_asignacion = ?
+                  AND alumno_cedula_alumno = ?
+                  AND estado = 'pendiente'
+            `, [asignacion.id_asignacion, alumno.cedula_alumno])
+            await conexion.commit()
+            archivoRegistrado = true
+        } catch (error) {
+            await conexion.rollback().catch(() => {})
+            throw error
+        } finally {
+            conexion.release()
+        }
 
         const correccion = await corregirEntregaCodigo({
             idEntrega: resultado.insertId,
@@ -645,6 +661,41 @@ const obtenerResultadoEvaluacion = async (req, res) => {
         return res.status(500).json({ mensaje: "Error interno del servidor" })
     }
 }
+
+const obtenerMisClasesAlumno = async (req, res) => {
+    try {
+        const [clases] = await pool.query(
+            `
+            SELECT
+                c.id_clase,
+                c.nombre,
+                c.periodo_lectivo,
+                ca.estado,
+                ca.fecha_inscripcion
+            FROM login l
+            INNER JOIN alumno a
+                ON a.cedula_alumno = l.alumno_cedula_alumno
+            INNER JOIN clase_alumno ca
+                ON ca.alumno_cedula_alumno = a.cedula_alumno
+            INNER JOIN clase c
+                ON c.id_clase = ca.id_clase
+            WHERE l.id_login = ?
+            AND l.rol = 'alumno'
+            ORDER BY ca.fecha_inscripcion DESC
+            `,
+            [req.user.id]
+        )
+
+        return res.status(200).json({ clases })
+
+    } catch (error) {
+        console.error(error)
+        return res.status(500).json({
+            mensaje: "Error al obtener las clases del alumno"
+        })
+    }
+}
+
 export {
     obtenerMiPerfil,
     obtenerEvaluaciones,
@@ -653,5 +704,7 @@ export {
     obtenerProgresoEvaluacion,
     finalizarEvaluacion,
     subirArchivo,
-    obtenerResultadoEvaluacion
+    obtenerResultadoEvaluacion,
+    obtenerMisClasesAlumno,
+
 }

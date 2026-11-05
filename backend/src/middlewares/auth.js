@@ -50,7 +50,8 @@ const auth = async (req, res, next) => {
         req.user = {
             id: cuenta.id_login,
             usuario: cuenta.usuario,
-            rol: cuenta.rol
+            // Unifica el rol vigente antes de aplicar middleware y lógica de controladores.
+            rol: String(cuenta.rol || "").trim().toLowerCase()
         }
 
         next()

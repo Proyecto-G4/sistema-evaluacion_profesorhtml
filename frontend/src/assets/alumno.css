@@ -1,0 +1,818 @@
+
+.pet-alumno {
+  --fondo: #f7f6fa;
+  --superficie: #ffffff;
+  --texto: #292536;
+  --secundario: #777386;
+  --borde: #e9e6ef;
+  --violeta: #6846a5;
+  --violeta-claro: #f0ebf8;
+
+  min-height: 100vh;
+  background: var(--fondo);
+  color: var(--texto);
+  font-family: Inter, system-ui, sans-serif;
+  font-size: 15px;
+}
+
+.pet-alumno.oscuro {
+  --fondo: #191622;
+  --superficie: #252130;
+  --texto: #f3effa;
+  --secundario: #b5adc3;
+  --borde: #3a3447;
+  --violeta: #b69ae7;
+  --violeta-claro: #393047;
+}
+
+.pet-alumno.fuente-grande {
+  font-size: 17px;
+}
+
+.pet-alumno * {
+  box-sizing: border-box;
+}
+
+.pet-alumno button {
+  font: inherit;
+  cursor: pointer;
+}
+
+.barra-superior-alumno {
+  min-height: 76px;
+  padding: 0 5%;
+  background: var(--superficie);
+  border-bottom: 1px solid var(--borde);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 25px;
+  position: relative;
+  z-index: 5;
+}
+
+.marca-alumno {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 155px;
+}
+
+.marca-icono-alumno {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  color: white;
+  background: #6846a5;
+  font-weight: 900;
+  font-size: 23px;
+}
+
+.marca-alumno strong {
+  display: block;
+  font-size: 19px;
+  letter-spacing: 1px;
+}
+
+.marca-alumno small {
+  color: var(--secundario);
+  font-size: 11px;
+}
+
+.navegacion-alumno {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.navegacion-alumno button {
+  border: 0;
+  background: transparent;
+  color: var(--secundario);
+  padding: 11px 13px;
+  border-radius: 9px;
+  font-size: 13px;
+}
+
+.navegacion-alumno button:hover,
+.navegacion-alumno button.activa {
+  background: var(--violeta-claro);
+  color: var(--violeta);
+}
+
+.menu-mas-alumno {
+  position: relative;
+}
+
+.menu-desplegable-alumno {
+  position: absolute;
+  right: 0;
+  top: 43px;
+  width: 205px;
+  padding: 8px;
+  border: 1px solid var(--borde);
+  background: var(--superficie);
+  border-radius: 12px;
+  box-shadow: 0 10px 30px #21153318;
+}
+
+.menu-desplegable-alumno button {
+  display: block;
+  width: 100%;
+  text-align: left;
+}
+
+.salir-alumno,
+.boton-secundario-alumno {
+  border: 1px solid var(--borde);
+  border-radius: 9px;
+  background: var(--superficie);
+  color: var(--texto);
+  padding: 10px 15px;
+}
+
+.contenido-alumno {
+  max-width: 1220px;
+  width: 90%;
+  margin: 38px auto 65px;
+}
+
+.encabezado-alumno {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 28px;
+}
+
+.sobretitulo-alumno {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+  color: var(--violeta);
+}
+
+.encabezado-alumno h1 {
+  font-size: clamp(26px, 3vw, 36px);
+  margin: 7px 0;
+  letter-spacing: -1px;
+}
+
+.encabezado-alumno p,
+.panel-alumno p {
+  color: var(--secundario);
+}
+
+.avatar-alumno {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--violeta-claro);
+  color: var(--violeta);
+  font-weight: 800;
+}
+
+.bienvenida-alumno {
+  padding: 35px 40px;
+  border-radius: 18px;
+  background: linear-gradient(115deg, #38265d, #7352a8);
+  color: white;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  min-height: 220px;
+  overflow: hidden;
+}
+
+.bienvenida-alumno span {
+  font-size: 10px;
+  letter-spacing: 1.6px;
+  opacity: .8;
+  font-weight: 800;
+}
+
+.bienvenida-alumno h2 {
+  font-size: clamp(24px, 3vw, 34px);
+  margin: 12px 0;
+}
+
+.bienvenida-alumno p {
+  color: #e6dff1;
+  margin-bottom: 22px;
+}
+
+.bienvenida-alumno button {
+  border: 0;
+  border-radius: 9px;
+  padding: 12px 17px;
+  background: white;
+  color: #533b7d;
+  font-weight: 750;
+}
+
+.ilustracion-alumno {
+  font-size: 90px;
+  opacity: .9;
+  padding: 15px 45px;
+}
+
+.resumen-alumno {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin: 22px 0;
+}
+
+.indicador-alumno,
+.panel-alumno,
+.tarjeta-evaluacion-alumno {
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: 14px;
+  padding: 21px;
+}
+
+.indicador-alumno span,
+.indicador-alumno small {
+  display: block;
+  color: var(--secundario);
+}
+
+.indicador-alumno strong {
+  display: block;
+  font-size: 30px;
+  margin: 10px 0 4px;
+  color: var(--violeta);
+}
+
+.columnas-alumno {
+  display: grid;
+  grid-template-columns: 1.5fr 1fr;
+  gap: 18px;
+}
+
+.titulo-panel-alumno {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.titulo-panel-alumno h3,
+.panel-alumno h3 {
+  margin: 0 0 6px;
+}
+
+.titulo-panel-alumno p {
+  margin: 0;
+  font-size: 13px;
+}
+
+.enlace-alumno {
+  border: 0;
+  background: transparent;
+  color: var(--violeta);
+  font-weight: 700;
+  padding: 8px;
+}
+
+.actividad-alumno {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 17px 0;
+  border-bottom: 1px solid var(--borde);
+}
+
+.actividad-alumno:last-child {
+  border-bottom: 0;
+}
+
+.actividad-icono-alumno,
+.evaluacion-icono-alumno {
+  width: 43px;
+  height: 43px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  background: var(--violeta-claro);
+  font-size: 20px;
+}
+
+.actividad-info-alumno {
+  flex: 1;
+}
+
+.actividad-info-alumno strong,
+.actividad-info-alumno small {
+  display: block;
+}
+
+.actividad-info-alumno small {
+  color: var(--secundario);
+  margin-top: 5px;
+}
+
+.estado-alumno {
+  background: var(--violeta-claro);
+  color: var(--violeta);
+  padding: 6px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+}
+
+.panel-consejo-alumno {
+  background: var(--violeta-claro);
+  border-color: transparent;
+}
+
+.consejo-icono-alumno {
+  font-size: 38px;
+  margin: 22px 0 12px;
+}
+
+.panel-consejo-alumno p {
+  line-height: 1.6;
+}
+
+.lista-evaluaciones-alumno {
+  display: grid;
+  gap: 14px;
+  margin-top: 17px;
+}
+
+.tarjeta-evaluacion-alumno {
+  display: flex;
+  align-items: center;
+  gap: 17px;
+}
+
+.evaluacion-datos-alumno {
+  flex: 1;
+}
+
+.evaluacion-datos-alumno h3 {
+  margin: 7px 0;
+}
+
+.evaluacion-datos-alumno p {
+  margin: 0;
+  color: var(--secundario);
+  font-size: 13px;
+}
+
+.tarjeta-evaluacion-alumno > button,
+.boton-primario-alumno,
+.boton-finalizar-alumno {
+  border: 0;
+  border-radius: 9px;
+  padding: 12px 17px;
+  background: var(--violeta);
+  color: white;
+  font-weight: 750;
+}
+
+.pet-alumno button:disabled {
+  opacity: .5;
+  cursor: wait;
+}
+
+.evaluacion-activa-alumno {
+  display: grid;
+  gap: 20px;
+}
+
+.evaluacion-activa-alumno h2 {
+  margin: 0;
+}
+
+.pregunta-alumno {
+  border: 1px solid var(--borde);
+  border-radius: 12px;
+  padding: 20px;
+  display: grid;
+  gap: 13px;
+}
+
+.pregunta-alumno h3 {
+  margin: 0;
+}
+
+.pet-alumno textarea {
+  width: 100%;
+  border: 1px solid var(--borde);
+  border-radius: 10px;
+  padding: 13px;
+  background: var(--fondo);
+  color: var(--texto);
+  font: inherit;
+}
+
+.subir-archivo-alumno {
+  display: grid;
+  gap: 9px;
+  color: var(--secundario);
+  font-size: 13px;
+}
+
+.boton-finalizar-alumno {
+  justify-self: start;
+}
+
+.resultados-alumno {
+  display: grid;
+  gap: 14px;
+}
+
+.resultados-alumno h3 {
+  margin: 0;
+}
+
+.vacio-alumno {
+  color: var(--secundario);
+  padding: 20px 0;
+}
+
+.vacio-grande-alumno {
+  min-height: 240px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  padding: 30px;
+}
+
+.vacio-grande-alumno > span {
+  font-size: 42px;
+  margin-bottom: 12px;
+}
+
+.vacio-grande-alumno h3 {
+  margin: 0 0 8px;
+}
+
+.vacio-grande-alumno p {
+  max-width: 520px;
+  line-height: 1.6;
+}
+
+.configuracion-alumno {
+  display: grid;
+  gap: 20px;
+}
+
+.opcion-config-alumno {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 17px 0;
+  border-top: 1px solid var(--borde);
+}
+
+.opcion-config-alumno strong,
+.opcion-config-alumno small {
+  display: block;
+}
+
+.opcion-config-alumno small {
+  color: var(--secundario);
+  margin-top: 5px;
+}
+
+.opciones-alumno {
+  display: flex;
+  gap: 8px;
+}
+
+.opciones-alumno button {
+  border: 1px solid var(--borde);
+  background: var(--superficie);
+  color: var(--texto);
+  padding: 9px 12px;
+  border-radius: 8px;
+}
+
+.opciones-alumno button.seleccionada {
+  border-color: var(--violeta);
+  background: var(--violeta-claro);
+  color: var(--violeta);
+}
+
+.aviso-alumno {
+  padding: 12px 15px;
+  border-radius: 9px;
+  margin-bottom: 15px;
+}
+
+.exito-alumno {
+  background: #e3f3e7;
+  color: #27653c;
+}
+
+.error-alumno {
+  background: #fbe8e8;
+  color: #9a3030;
+}
+
+.pie-alumno {
+  border-top: 1px solid var(--borde);
+  padding: 22px;
+  text-align: center;
+  color: var(--secundario);
+  font-size: 12px;
+}
+
+@media (max-width: 900px) {
+  .barra-superior-alumno {
+    flex-wrap: wrap;
+    padding: 15px 5%;
+  }
+
+  .navegacion-alumno {
+    order: 3;
+    width: 100%;
+    overflow-x: auto;
+  }
+
+  .navegacion-alumno button {
+    white-space: nowrap;
+  }
+
+  .resumen-alumno {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 650px) {
+  .contenido-alumno {
+    width: 92%;
+    margin-top: 25px;
+  }
+
+  .columnas-alumno {
+    grid-template-columns: 1fr;
+  }
+
+  .bienvenida-alumno {
+    padding: 25px;
+  }
+
+  .ilustracion-alumno {
+    font-size: 50px;
+    padding: 5px;
+  }
+
+  .tarjeta-evaluacion-alumno {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .tarjeta-evaluacion-alumno > button {
+    width: 100%;
+  }
+
+  .opcion-config-alumno {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .encabezado-alumno {
+    gap: 10px;
+  }
+}
+.lista-clases-alumno {
+  display: grid;
+  gap: 16px;
+  margin-top: 22px;
+}
+
+.tarjeta-clase-alumno {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 20px;
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: 16px;
+}
+
+.clase-icono-alumno {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  flex-shrink: 0;
+  border-radius: 14px;
+  background: var(--violeta-claro);
+  font-size: 25px;
+}
+
+.clase-info-alumno {
+  flex: 1;
+  min-width: 0;
+}
+
+.clase-info-alumno h3 {
+  margin: 0 0 7px;
+  color: var(--texto);
+}
+
+.clase-info-alumno p,
+.clase-info-alumno small {
+  color: var(--secundario);
+}
+
+.clase-info-alumno p {
+  margin: 0 0 5px;
+}
+
+.estado-clase-alumno {
+  padding: 7px 12px;
+  border-radius: 20px;
+  background: var(--violeta-claro);
+  color: var(--violeta);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.estado-activo {
+  background: #e4f4e9;
+  color: #267542;
+}
+
+.estado-pendiente {
+  background: #fff2d9;
+  color: #94620d;
+}
+
+.estado-rechazado {
+  background: #fbe7e7;
+  color: #a43e3e;
+}
+
+@media (max-width: 600px) {
+  .tarjeta-clase-alumno {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+}
+/* ================================
+   PALETAS DE COLORES DEL ALUMNO
+================================ */
+
+
+/* =========================================
+   PALETAS DE COLORES - MODO CLARO Y OSCURO
+========================================= */
+
+/* VIOLETA */
+.pet-alumno.paleta-violeta {
+  --fondo: #f7f6fa;
+  --superficie: #ffffff;
+  --texto: #292536;
+  --secundario: #777386;
+  --borde: #e9e6ef;
+  --violeta: #6846a5;
+  --violeta-claro: #f0ebf8;
+  --violeta-oscuro: #38265d;
+}
+
+.pet-alumno.oscuro.paleta-violeta {
+  --fondo: #191622;
+  --superficie: #252130;
+  --texto: #f3effa;
+  --secundario: #b5adc3;
+  --borde: #3a3447;
+  --violeta: #b69ae7;
+  --violeta-claro: #393047;
+  --violeta-oscuro: #302342;
+}
+
+/* BOSQUE */
+.pet-alumno.paleta-bosque {
+  --fondo: #f3f6f1;
+  --superficie: #ffffff;
+  --texto: #29382d;
+  --secundario: #718074;
+  --borde: #dfe7dd;
+  --violeta: #496b55;
+  --violeta-claro: #e8eee7;
+  --violeta-oscuro: #263c35;
+}
+
+.pet-alumno.oscuro.paleta-bosque {
+  --fondo: #18221b;
+  --superficie: #243128;
+  --texto: #edf3eb;
+  --secundario: #afbdad;
+  --borde: #3b4b3e;
+  --violeta: #9cbea0;
+  --violeta-claro: #303e34;
+  --violeta-oscuro: #1e3028;
+}
+
+/* AZUL */
+.pet-alumno.paleta-azul {
+  --fondo: #f3f7fb;
+  --superficie: #ffffff;
+  --texto: #29394b;
+  --secundario: #74869a;
+  --borde: #dfe8f1;
+  --violeta: #356b9e;
+  --violeta-claro: #e5eff8;
+  --violeta-oscuro: #23466b;
+}
+
+.pet-alumno.oscuro.paleta-azul {
+  --fondo: #17212c;
+  --superficie: #222f3d;
+  --texto: #edf3f9;
+  --secundario: #aebdce;
+  --borde: #3a4b5e;
+  --violeta: #91bce2;
+  --violeta-claro: #2d3d50;
+  --violeta-oscuro: #20364d;
+}
+
+/* TIERRA */
+.pet-alumno.paleta-tierra {
+  --fondo: #faf6f1;
+  --superficie: #ffffff;
+  --texto: #45372d;
+  --secundario: #897766;
+  --borde: #eadfd3;
+  --violeta: #936747;
+  --violeta-claro: #f2e8dc;
+  --violeta-oscuro: #68452f;
+}
+
+.pet-alumno.oscuro.paleta-tierra {
+  --fondo: #241d18;
+  --superficie: #332820;
+  --texto: #f5ede5;
+  --secundario: #c2ad98;
+  --borde: #514033;
+  --violeta: #d0a982;
+  --violeta-claro: #44372d;
+  --violeta-oscuro: #39291f;
+}
+
+/* ELEMENTOS QUE USAN LA PALETA */
+.pet-alumno .marca-icono-alumno {
+  background: var(--violeta);
+}
+
+.pet-alumno .bienvenida-alumno {
+  background: linear-gradient(
+    115deg,
+    var(--violeta-oscuro),
+    var(--violeta)
+  );
+}
+
+.pet-alumno .panel-consejo-alumno {
+  background: var(--violeta-claro);
+  border-color: transparent;
+}
+
+.pet-alumno .opciones-alumno button.seleccionada {
+  border-color: var(--violeta);
+  background: var(--violeta-claro);
+  color: var(--violeta);
+}
+
+.pet-alumno .actividad-icono-alumno,
+.pet-alumno .evaluacion-icono-alumno,
+.pet-alumno .clase-icono-alumno {
+  background: var(--violeta-claro);
+}
+/* TEXTOS EN MODO OSCURO */
+.pet-alumno.oscuro {
+  color: #ffffff;
+}
+
+.pet-alumno.oscuro h1,
+.pet-alumno.oscuro h2,
+.pet-alumno.oscuro h3,
+.pet-alumno.oscuro h4,
+.pet-alumno.oscuro h5,
+.pet-alumno.oscuro h6,
+.pet-alumno.oscuro p,
+.pet-alumno.oscuro label,
+.pet-alumno.oscuro span,
+.pet-alumno.oscuro strong,
+.pet-alumno.oscuro small {
+  color: #ffffff;
+}
+
+/* Textos secundarios */
+.pet-alumno.oscuro .texto-secundario,
+.pet-alumno.oscuro .subtitulo,
+.pet-alumno.oscuro .descripcion {
+  color: #d6d1df;
+}

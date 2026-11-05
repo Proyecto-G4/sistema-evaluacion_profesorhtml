@@ -1,94 +1,131 @@
 
 <template>
   <main class="pagina-registro">
-    <section class="ventana-registro">
-      <RouterLink to="/" class="volver-inicio">
-        ← Volver al inicio
-      </RouterLink>
+    <RouterLink to="/" class="volver-inicio">
+      ← Volver al inicio
+    </RouterLink>
 
-      <h1>Crear cuenta</h1>
-      <p class="descripcion">
-        Registrate en PET para acceder a la plataforma.
-      </p>
+    <section class="contenedor-registro">
+      <div class="registro-personaje">
+        <h2>¡Sumate a Capi!</h2>
+        <p>Tu próximo paso en el aprendizaje comienza acá.</p>
+        <span class="personaje-etiqueta">
+          ¡VAMOS A CONOCERNOS!
+        </span>
 
-      <form @submit.prevent="registrarUsuario">
-        <div class="campo">
-          <label for="usuario">Usuario</label>
-          <input
-            id="usuario"
-            v-model.trim="usuario"
-            type="text"
-            placeholder="Elegí un nombre de usuario"
-            autocomplete="username"
-            required
-          />
-        </div>
-
-        <div class="campo">
-          <label for="cedula">Cédula</label>
-          <input
-            id="cedula"
-            v-model.trim="cedula"
-            type="text"
-            inputmode="numeric"
-            placeholder="Ingresá tu cédula"
-            required
-          />
-        </div>
-
-        <div class="campo">
-          <label for="password">Contraseña</label>
-          <input
-            id="password"
-            v-model="password"
-            type="password"
-            placeholder="Mínimo 8 caracteres"
-            autocomplete="new-password"
-            minlength="8"
-            required
-          />
-        </div>
-
-        <div class="campo">
-          <label for="confirmarPassword">Confirmar contraseña</label>
-          <input
-            id="confirmarPassword"
-            v-model="confirmarPassword"
-            type="password"
-            placeholder="Repetí tu contraseña"
-            autocomplete="new-password"
-            minlength="8"
-            required
-          />
-        </div>
-
-        <p
-          v-if="mensaje"
-          class="mensaje"
-          :class="{ exito: registroExitoso }"
-          role="status"
+        <img
+          src="/registro-capi.png"
+          alt="Carpincho de Capi"
         >
-          {{ mensaje }}
+
+      </div>
+
+      <div class="ventana-registro">
+        <div class="registro-encabezado">
+          <span class="registro-etiqueta">CAPI / REGISTRO</span>
+
+          <h1>Crear cuenta</h1>
+
+          <p class="descripcion">
+            Registrate para acceder a la plataforma.
+          </p>
+        </div>
+
+        <form @submit.prevent="registrarUsuario">
+          <div class="campo">
+            <label for="usuario">Usuario</label>
+
+            <input
+              id="usuario"
+              v-model.trim="usuario"
+              type="text"
+              placeholder="Elegí un nombre de usuario"
+              autocomplete="username"
+              required
+            >
+          </div>
+
+          <div class="campo">
+            <label for="cedula">Cédula</label>
+
+            <input
+              id="cedula"
+              v-model.trim="cedula"
+              type="text"
+              inputmode="numeric"
+              placeholder="Ingresá tu cédula"
+              required
+            >
+          </div>
+
+          <div class="campo">
+            <label for="password">Contraseña</label>
+
+            <input
+              id="password"
+              v-model="password"
+              type="password"
+              placeholder="Mínimo 8 caracteres"
+              autocomplete="new-password"
+              minlength="8"
+              required
+            >
+          </div>
+
+          <div class="campo">
+            <label for="confirmarPassword">Confirmar contraseña</label>
+
+            <input
+              id="confirmarPassword"
+              v-model="confirmarPassword"
+              type="password"
+              placeholder="Repetí tu contraseña"
+              autocomplete="new-password"
+              minlength="8"
+              required
+            >
+          </div>
+
+          <p
+            v-if="mensaje"
+            class="mensaje"
+            :class="{ exito: registroExitoso }"
+            role="status"
+          >
+            {{ mensaje }}
+          </p>
+
+          <div v-if="solicitud" class="solicitud-seguimiento">
+            <p>Solicitud #{{ solicitud.id }} · Estado: {{ estadoSolicitud || solicitud.estado }}</p>
+            <span>Guardá este código para consultar la aprobación</span>
+            <code>{{ solicitud.token_consulta }}</code>
+            <button type="button" :disabled="consultandoEstado" @click="consultarEstado">
+              {{ consultandoEstado ? 'Consultando...' : 'Consultar estado' }}
+            </button>
+            <p v-if="errorEstado" role="alert">{{ errorEstado }}</p>
+            <p v-if="motivoRechazo">Motivo: {{ motivoRechazo }}</p>
+          </div>
+
+          <button type="submit" :disabled="cargando">
+            {{ cargando ? "Creando cuenta..." : "Crear cuenta" }}
+          </button>
+        </form>
+
+        <p class="enlace-login">
+          ¿Ya tenés una cuenta?
+          <RouterLink to="/login">
+            Iniciar sesión
+          </RouterLink>
         </p>
-
-        <button type="submit" :disabled="cargando">
-          {{ cargando ? "Creando cuenta..." : "Crear cuenta" }}
-        </button>
-      </form>
-
-      <p class="enlace-login">
-        ¿Ya tenés una cuenta?
-        <RouterLink to="/login">Iniciar sesión</RouterLink>
-      </p>
+      </div>
     </section>
   </main>
 </template>
 
 <script setup>
 import { ref } from "vue"
-import { useRouter } from "vue-router"
-
-const router = useRouter()
+import "../assets/registro.css"
+import { apiFetch } from "../lib/api"
 
 const usuario = ref("")
 const cedula = ref("")
@@ -97,6 +134,29 @@ const confirmarPassword = ref("")
 const mensaje = ref("")
 const cargando = ref(false)
 const registroExitoso = ref(false)
+const solicitud = ref(null)
+const estadoSolicitud = ref('')
+const errorEstado = ref('')
+const motivoRechazo = ref('')
+const consultandoEstado = ref(false)
+
+async function consultarEstado() {
+  if (!solicitud.value) return
+  consultandoEstado.value = true
+  errorEstado.value = ''
+  try {
+    const datos = await apiFetch('/auth/register/estado', {
+      method: 'POST',
+      body: JSON.stringify({ id: solicitud.value.id, token: solicitud.value.token_consulta })
+    })
+    estadoSolicitud.value = datos.solicitud.estado
+    motivoRechazo.value = datos.solicitud.motivo_rechazo || ''
+  } catch (error) {
+    errorEstado.value = error.message
+  } finally {
+    consultandoEstado.value = false
+  }
+}
 
 async function registrarUsuario() {
   mensaje.value = ""
@@ -115,13 +175,8 @@ async function registrarUsuario() {
   cargando.value = true
 
   try {
-    const respuesta = await fetch(
-      "http://localhost:2323/api/auth/register",
-      {
+    const datos = await apiFetch('/auth/register', {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
         body: JSON.stringify({
           usuario: usuario.value,
           password: password.value,
@@ -129,135 +184,22 @@ async function registrarUsuario() {
           rol: "alumno",
           cedula: cedula.value
         })
-      }
-    )
-
-    const datos = await respuesta.json()
-
-    if (!respuesta.ok) {
-      mensaje.value = datos.mensaje || "No se pudo crear la cuenta."
-      return
-    }
+      })
 
     registroExitoso.value = true
     mensaje.value = datos.mensaje || "Cuenta creada correctamente."
+    solicitud.value = datos.solicitud || null
 
     usuario.value = ""
     cedula.value = ""
     password.value = ""
     confirmarPassword.value = ""
 
-    // Después de registrarse, podrá iniciar sesión.
-    setTimeout(() => {
-      router.push("/login")
-    }, 1500)
   } catch (error) {
     console.error("Error al registrar usuario:", error)
-    mensaje.value = "No se pudo conectar con el servidor."
+    mensaje.value = error.message || "No se pudo conectar con el servidor."
   } finally {
     cargando.value = false
   }
 }
 </script>
-
-<style scoped>
-.pagina-registro {
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
-  box-sizing: border-box;
-}
-
-.ventana-registro {
-  width: 100%;
-  max-width: 460px;
-  padding: 36px;
-  box-sizing: border-box;
-  background: white;
-  color: #171321;
-  border-radius: 20px;
-  box-shadow: 0 12px 35px rgba(25, 15, 45, 0.16);
-}
-
-.volver-inicio {
-  display: inline-block;
-  margin-bottom: 24px;
-  color: #6236a0;
-  text-decoration: none;
-}
-
-h1 {
-  margin: 0 0 10px;
-  font-size: 28px;
-}
-
-.descripcion {
-  margin: 0 0 26px;
-  color: #686273;
-}
-
-.campo {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-bottom: 18px;
-}
-
-.campo label {
-  font-weight: 600;
-}
-
-.campo input {
-  width: 100%;
-  padding: 13px 14px;
-  box-sizing: border-box;
-  border: 1px solid #d8d2e2;
-  border-radius: 10px;
-  font: inherit;
-}
-
-.campo input:focus {
-  outline: 2px solid #9c79d1;
-  outline-offset: 2px;
-}
-
-button {
-  width: 100%;
-  padding: 14px;
-  border: none;
-  border-radius: 10px;
-  background: #6236a0;
-  color: white;
-  font: inherit;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-button:disabled {
-  opacity: 0.65;
-  cursor: wait;
-}
-
-.mensaje {
-  color: #b42318;
-  font-size: 14px;
-}
-
-.mensaje.exito {
-  color: #187443;
-}
-
-.enlace-login {
-  margin: 24px 0 0;
-  text-align: center;
-  color: #686273;
-}
-
-.enlace-login a {
-  color: #6236a0;
-  font-weight: 700;
-}
-</style>
-

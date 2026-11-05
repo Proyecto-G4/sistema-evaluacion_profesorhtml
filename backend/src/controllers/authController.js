@@ -315,11 +315,17 @@ const login = async (req, res) => {
             })
         }
 
+        // Roles se emiten normalizados para mantener un contrato estable con Vue y los guards.
+        const rol = String(usuarioEncontrado.rol || "").trim().toLowerCase()
+        if (!["alumno", "profesor", "admin"].includes(rol)) {
+            return res.status(403).json({ mensaje: "El rol de la cuenta no es válido" })
+        }
+
         const token = jwt.sign(
             {
                 id: usuarioEncontrado.id_login,
                 usuario: usuarioEncontrado.usuario,
-                rol: usuarioEncontrado.rol
+                rol
             },
             process.env.JWT_SECRET,
             {

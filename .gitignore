@@ -14,3 +14,11 @@ dist/
 # Archivos del sistema y editores
 .DS_Store
 .vscode/
+
+# Archivos subidos por usuarios
+uploads/
+
+# Archivos privados y certificados locales
+backend/uploads/
+backend/.env
+backend/.env.*
